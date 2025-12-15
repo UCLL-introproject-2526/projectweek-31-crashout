@@ -1,15 +1,23 @@
 import pygame
 
-pygame.init()
-screen_size = (800,600)
-screen = pygame.display.set_mode(screen_size)
+def create_main_surface():
+    screen_size = (800, 600)
+    screen = pygame.display.set_mode(screen_size)
+    return screen
 
-running = True
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
+def main():
+    pygame.init()
 
-    pygame.display.flip()
+    screen = create_main_surface()
 
-pygame.quit()
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        pygame.display.flip()
+
+    pygame.quit()
+
+main()
