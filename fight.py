@@ -3,33 +3,46 @@ from fighter1 import Fighter
 
 pygame.init()
 
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("brawler")
 
 clock = pygame.time.Clock()
 FPS = 60
+#colors
+YELLOW = (255 ,255 ,0)
+RED = (255 ,0, 0)
+WHITE = (255,255,255)
+BLACK = (0,0,0)
 
-bg_image = pygame.image.load("images/background/background.png").convert_alpha()
+bg_image = pygame.image.load("images/background/forest.jpg").convert_alpha()
 
     
 def draw_bg():
     scaled_bg = pygame.transform.scale(bg_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
     screen.blit(scaled_bg, (0,0))
-    
-fighter_1 = Fighter(200, 310)
-fighter_2 = Fighter(500, 310)
+def draw_health_bar(health,x,y):
+     ratio = health / 100
+     pygame.draw.rect(screen, WHITE, (x - 2, y - 2, 604, 44))
+     pygame.draw.rect(screen, RED, (x, y, 600, 40))
+     pygame.draw.rect(screen, YELLOW, (x, y, 600 * ratio, 40))
+     
+fighter_1 = Fighter(320, 620)
+fighter_2 = Fighter(1400, 450)
 
 
 running = True
 while running:
     
     clock.tick(FPS)
-    
+    #draw background
     draw_bg()
+    #draw health bar
+    draw_health_bar(fighter_1.health, 200,100)
+    draw_health_bar(fighter_2.health, 1120,100)
     
-    fighter_1.move(SCREEN_WIDTH, SCREEN_HEIGHT)
+    fighter_1.move(SCREEN_WIDTH, SCREEN_HEIGHT, screen, fighter_2)
     
     
     fighter_1.draw(screen)
