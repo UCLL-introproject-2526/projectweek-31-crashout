@@ -17,7 +17,10 @@ class Fighter():
         self.jump = False
         self.attacking = False
         self.attack_type = 0
+        self.attack_cooldown  = 0
+        self.hit = False
         self.health = 100
+        self.alive = True
     
     def load_images(self, sprite_sheet, animation_steps):
         #characters van spritesheet halen
@@ -37,20 +40,21 @@ class Fighter():
         dx = 0
         dy = 0
         self.running = False
+        self.attack_type = 0
         
         key = pygame.key.get_pressed()
 
         #alleen wanneer niet attacking
         if self.attacking == False:
             #left,right
-            if key[pygame.K_q]:
+            if key[pygame.K_LEFT]:
                 dx = -SPEED
                 self.running = True
-            if key[pygame.K_d]:
+            if key[pygame.K_RIGHT]:
                 dx = +SPEED
                 self.running = True
             #jump
-            if key[pygame.K_w] and self.jump == False:
+            if key[pygame.K_UP] and self.jump == False:
                 self.vel_y = -30
                 self.jump = True
             #attack
@@ -79,17 +83,32 @@ class Fighter():
             self.flip = False
         else: 
             self.flip = True
-        
+        #apply cooldown
+        if self.attack_cooldown > 0:
+            self.attack_cooldown -= 1
         self.rect.x += dx 
         self.rect.y += dy 
     #animatie updates
     def update(self):
         #check what action is happening
-        if self.running == True:
-            self.update_action(1)
+        if self.health <= 0:
+            self.health = 0
+            self.alive = False
+            self.update_action(6)#death
+        elif self.hit == True:
+            self.update_action(5)#hit
+        elif self.attacking == True:
+            if self.attack_type == 1:
+                self.update_action(3)#atk1
+            elif self.attack_type == 2:
+                self.update_action(4)#atk2
+        elif self.jump == True:
+            self.update_action(2)#jump
+        elif self.running == True:
+            self.update_action(1)#run
         else:
-            self.update_action(0)
-        animation_cooldown = 200
+            self.update_action(0)#idle
+        animation_cooldown = 20
         #update image
         self.image = self.animation_list[self.action][self.frame_index]
         #check if enough time has passes since update
@@ -98,16 +117,30 @@ class Fighter():
             self.update_time = pygame.time.get_ticks()
         #check if animation has finished
         if self.frame_index >= len(self.animation_list[self.action]):
-            self.frame_index = 0
+            #if player is dead end ani
+            if self.alive == False:
+                self.frame_index = len(self.animation_list[self.action]) - 1
+            else:
+                self.frame_index = 0
+                #check if attack has happened
+                if self.action == 3 or self.action == 4:
+                    self.attacking = False
+                    self.attack_cooldown = 20
+                if self.action == 5:
+                    self.hit = False
+                    self.attacking = False
+                    self.attack_cooldown = 20
 
 
     def attack(self, surface, target):
-        self.attacking = True
-        attacking_rect = pygame.Rect(self.rect.centerx - (2 * self.rect.width * self.flip), self.rect.y, 2 * self.rect.width, self.rect.height)
-        if attacking_rect.colliderect(target.rect,):
-            target.health -= 10
+        if self.attack_cooldown == 0:
+            self.attacking = True
+            attacking_rect = pygame.Rect(self.rect.centerx - (self.rect.width * self.flip), self.rect.y +self.rect.height * 0.25, self.rect.width, self.rect.height * 0.5)
+            if attacking_rect.colliderect(target.rect,):
+                target.health -= 10
+                target.hit = True
 
-        pygame.draw.rect(surface, (0 ,255 , 0), attacking_rect)
+            pygame.draw.rect(surface, (0 ,255 , 0), attacking_rect)
     
 
     def update_action(self, new_action):

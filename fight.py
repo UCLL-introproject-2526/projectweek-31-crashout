@@ -29,12 +29,12 @@ BIKER_DATA = [BIKER_SIZE, BIKER_SCALE,BIKER_OFFSET]
 bg_image = pygame.image.load("images/background/forest.jpg").convert_alpha()
 
 #load characters
-Drifter_sheet = pygame.image.load("images/characters/Drifter/full.png").convert_alpha()
-Biker_sheet = pygame.image.load("images/characters/Biker/Biker_full.png").convert_alpha()
+Drifter_sheet = pygame.image.load("images/characters/Drifter/untitled.png").convert_alpha()
+Biker_sheet = pygame.image.load("images/characters/Biker/gooder.png").convert_alpha()
 
 #define number steps
-DRIFTER_ANIMATION_STEPS = [7, 10, 10, 6, 6, 5] 
-BIKER_ANIMATION_STEPS = [4, 6, 4, 6, 8, 6]     
+DRIFTER_ANIMATION_STEPS = [7, 10, 10, 6, 6, 4, 5] 
+BIKER_ANIMATION_STEPS = [4, 6, 4, 6, 8, 2, 6]     
 
 
 def draw_bg():
