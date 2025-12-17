@@ -8,7 +8,7 @@ def create_main_surface():
 def main():
     pygame.init()
 
-    screen = create_main_surface() 
+    screen = create_main_surface()
 
     running = True
     while running:
@@ -20,8 +20,4 @@ def main():
 
     pygame.quit()
 
-<<<<<<< HEAD
-main()
-=======
 main() 
->>>>>>> 40f2d98b087b2f2e6237dbb42ae7e5c9927d294f
