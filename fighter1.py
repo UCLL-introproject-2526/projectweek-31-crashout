@@ -1,7 +1,9 @@
 import pygame
-
+import random
 class Fighter():
-    def __init__(self, x, y, flip, data, sprite_sheet, animation_steps):
+    def __init__(self, player, x, y, flip, data, sprite_sheet, animation_steps, is_cpu=False):
+        self.player = player
+        self.is_cpu = is_cpu
         self.size = data[0]
         self.image_scale = data[1]
         self.offset = data[2]
@@ -29,12 +31,12 @@ class Fighter():
         for y, animation in enumerate(animation_steps):
             temp_img_list = []
             for x in range(animation):
-                temp_img = sprite_sheet.subsurface(x * self.size, y * self.size, self.size, self.size)
+                temp_img = sprite_sheet.subsurface(x * self.size, y * self.size, self.size, self.size).convert_alpha()
                 temp_img_list.append(pygame.transform.scale(temp_img,(self.size * self.image_scale, self.size * self.image_scale)))
             animation_list.append(temp_img_list)
         return animation_list    
 
-    def move(self, screen_width, screen_height, surface, target):
+    def move(self, screen_width, screen_height, surface, target, round_over):
         SPEED = 10
         GRAVITY = 2
         dx = 0
@@ -45,26 +47,65 @@ class Fighter():
         key = pygame.key.get_pressed()
 
         #alleen wanneer niet attacking
-        if self.attacking == False:
-            #left,right
-            if key[pygame.K_LEFT]:
-                dx = -SPEED
-                self.running = True
-            if key[pygame.K_RIGHT]:
-                dx = +SPEED
-                self.running = True
-            #jump
-            if key[pygame.K_UP] and self.jump == False:
-                self.vel_y = -30
-                self.jump = True
-            #attack
-            if key[pygame.K_r] or key[pygame.K_t]:
-                self.attack(surface, target)
-                #welk attack type
-                if key[pygame.K_r]:
-                    self.attack_type = 1
-                if key[pygame.K_t]:
-                    self.attack_type = 2
+        if self.attacking == False and self.alive == True and round_over == False:
+
+            if not self.is_cpu:
+                #check player 1 controls
+                if self.player == 1:
+                    #left,right
+                    if key[pygame.K_LEFT]:
+                        dx = -SPEED
+                        self.running = True
+                    if key[pygame.K_RIGHT]:
+                        dx = +SPEED
+                        self.running = True
+                    #jump
+                    if key[pygame.K_UP] and self.jump == False:
+                        self.vel_y = -30
+                        self.jump = True
+                    #attack
+                    if key[pygame.K_o] or key[pygame.K_p]:
+                        self.attack(target)
+                        #welk attack type
+                        if key[pygame.K_o]:
+                            self.attack_type = 1
+                        if key[pygame.K_p]:
+                            self.attack_type = 2
+            else:
+                # --- VERBETERDE AI LOGICA ---
+                dist_x = target.rect.centerx - self.rect.centerx
+                dist_y = target.rect.centery - self.rect.centery
+
+                # 1. AFSTAND BEPALEN (AI gedrag baseren op afstand)
+                # Dichtbij: Aanvallen
+                if abs(dist_x) < 250:
+                    if self.attack_cooldown == 0:
+                        # Kies willekeurig tussen aanval 1 of 2
+                        self.attack_type = random.choice([1, 2])
+                        self.attack(target)
+                # Middelmatig: Naar de speler toe lopen
+                elif abs(dist_x) > 200:
+                    if dist_x > 0:
+                        dx = SPEED
+                    else:
+                        dx = -SPEED
+                    self.running = True
+
+                # 2. DEFENSIEF GEDRAG (Springen of ontwijken)
+                # Als de speler aanvalt en de AI is dichtbij, kleine kans om te springen
+                if target.attacking and abs(dist_x) < 150:
+                    if not self.jump and random.random() < 0.05:
+                        self.vel_y = -30
+                        self.jump = True
+
+                # 3. RANDOM JUMP (Om het minder voorspelbaar te maken)
+                if not self.jump and random.random() < 0.005:
+                    self.vel_y = -30
+                    self.jump = True
+
+
+
+
             
         self.vel_y += GRAVITY
         dy += self.vel_y
@@ -77,12 +118,12 @@ class Fighter():
             self.vel_y = 0
             self.jump = False
             dy = screen_height - 270 - self.rect.bottom
-            
-        #ensure players face eachother
-        if target.rect.centerx > self.rect.centerx:
-            self.flip = False
-        else: 
-            self.flip = True
+        if self.attacking == False:    
+            #ensure players face eachother
+            if target.rect.centerx > self.rect.centerx:
+                self.flip = False
+            else: 
+                self.flip = True
         #apply cooldown
         if self.attack_cooldown > 0:
             self.attack_cooldown -= 1
@@ -108,7 +149,7 @@ class Fighter():
             self.update_action(1)#run
         else:
             self.update_action(0)#idle
-        animation_cooldown = 20
+        animation_cooldown = 50
         #update image
         self.image = self.animation_list[self.action][self.frame_index]
         #check if enough time has passes since update
@@ -132,16 +173,15 @@ class Fighter():
                     self.attack_cooldown = 20
 
 
-    def attack(self, surface, target):
+    def attack(self, target):
+        if not self.alive or not target.alive:
+            return
         if self.attack_cooldown == 0:
             self.attacking = True
             attacking_rect = pygame.Rect(self.rect.centerx - (self.rect.width * self.flip), self.rect.y +self.rect.height * 0.25, self.rect.width, self.rect.height * 0.5)
             if attacking_rect.colliderect(target.rect,):
                 target.health -= 10
                 target.hit = True
-
-            pygame.draw.rect(surface, (0 ,255 , 0), attacking_rect)
-    
 
     def update_action(self, new_action):
         #check if the new action is different
@@ -152,5 +192,4 @@ class Fighter():
             self.update_time = pygame.time.get_ticks()
     def draw(self, surface):
         img = pygame.transform.flip(self.image, self.flip, False)
-        pygame.draw.rect(surface, (255,0,0), self.rect)
         surface.blit(img,(self.rect.x - (self.offset[0] * self.image_scale), self.rect.y - (self.offset[1] * self.image_scale)))
