@@ -2,9 +2,11 @@ import pygame
 import random
 import sys
 import json
+import os 
 
 # --- 1. CONFIGURATION & CONSTANTS ---
 pygame.init()
+pygame.mixer.pre_init(44100, -16, 2, 2048) 
 pygame.mixer.init()
 
 # Detect Screen Size
@@ -27,28 +29,29 @@ def get_font(size):
     except:
         return pygame.font.SysFont("Arial", size, bold=True)
 
-# --- SOUND EFFECTS LOADING ---
-# We try to load the sounds. If they don't exist, the game won't crash.
-try:
-    COIN_SFX = pygame.mixer.Sound("assets/coin.mp3")
-    COIN_SFX.set_volume(0.6)
-except:
-    COIN_SFX = None
-    print("Warning: assets/coin.mp3 not found")
+# --- ROBUST SOUND LOADER ---
+def load_sound(filename_base):
+    path_wav = f"assets/{filename_base}.wav"
+    path_mp3 = f"assets/{filename_base}.mp3"
+    sound_obj = None
+    
+    if os.path.exists(path_wav):
+        try: sound_obj = pygame.mixer.Sound(path_wav)
+        except: pass
+    elif os.path.exists(path_mp3):
+        try: sound_obj = pygame.mixer.Sound(path_mp3)
+        except: pass
+        
+    return sound_obj
 
-try:
-    POWERUP_SFX = pygame.mixer.Sound("assets/powerup.mp3")
-    POWERUP_SFX.set_volume(0.7)
-except:
-    POWERUP_SFX = None
-    print("Warning: assets/powerup.mp3 not found")
+COIN_SFX = load_sound("coin")
+if COIN_SFX: COIN_SFX.set_volume(0.6)
 
-try:
-    START_SFX = pygame.mixer.Sound("assets/start.mp3")
-    START_SFX.set_volume(1.0)
-except:
-    START_SFX = None
-    print("Warning: assets/start.mp3 not found")
+POWERUP_SFX = load_sound("powerup")
+if POWERUP_SFX: POWERUP_SFX.set_volume(0.8) 
+
+START_SFX = load_sound("start")
+if START_SFX: START_SFX.set_volume(1.0)
 
 # --- MAP LOADING ---
 try:
@@ -184,51 +187,142 @@ class SmokeParticle(pygame.sprite.Sprite):
         if self.timer <= 0:
             self.kill()
 
+# --- NIEUWE CLASSES VOOR SNEEUW EN BANDENSPOREN ---
+
+class SnowParticle(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__()
+        size = random.randint(2, 4)
+        self.image = pygame.Surface((size, size), pygame.SRCALPHA)
+        shade = random.randint(220, 255)
+        self.image.fill((shade, shade, shade))
+        self.rect = self.image.get_rect()
+        self.rect.x = random.randint(0, WINDOW_WIDTH)
+        self.rect.y = random.randint(-WINDOW_HEIGHT, 0)
+        self.vx = random.uniform(-0.5, 0.5)
+        self.vy = random.uniform(1.5, 3)
+
+    def update(self):
+        self.rect.x += self.vx
+        self.rect.y += self.vy
+        if self.rect.top > WINDOW_HEIGHT:
+            self.rect.x = random.randint(0, WINDOW_WIDTH)
+            self.rect.y = random.randint(-50, 0)
+
+class TireMark(pygame.sprite.Sprite):
+    def __init__(self, pos, speed):
+        super().__init__()
+        w, h = 6, 12
+        self.image = pygame.Surface((w, h), pygame.SRCALPHA)
+        # Donkergrijze kleur, transparant
+        self.image.fill((30, 30, 30, 120))
+        self.rect = self.image.get_rect(center=pos)
+        self.lifetime = 100
+        self.speed = speed # Snelheid van de weg
+
+    def update(self):
+        # Beweeg mee met de weg (naar beneden)
+        self.rect.y += self.speed 
+        self.lifetime -= 1
+        if self.lifetime <= 0:
+            self.kill()
+        elif self.lifetime < 20:
+            # Langzaam vervagen
+            alpha = int(120 * (self.lifetime / 20))
+            self.image.set_alpha(alpha)
+
+# --- VERNIEUWDE SPELER CLASS (MET SNELLERE MOVEMENT) ---
+
 class PlayerCar(pygame.sprite.Sprite):
-    def __init__(self, image_path):
-        pygame.sprite.Sprite.__init__(self)
+    def __init__(self, image_path, tire_group):
+        super().__init__()
         try:
             raw_image = pygame.image.load(image_path).convert_alpha()
-            target_width = int(LANE_WIDTH * 1.2) 
+            target_width = int(LANE_WIDTH * 1.2)
             scale = target_width / raw_image.get_width()
             new_h = int(raw_image.get_height() * scale)
             self.original_image = pygame.transform.scale(raw_image, (target_width, new_h))
         except:
             self.original_image = pygame.Surface((int(LANE_WIDTH*0.55), 80))
-            self.original_image.fill((255, 0, 0)) 
+            self.original_image.fill((255, 0, 0))
 
         self.image = self.original_image
         self.rect = self.image.get_rect()
-        self.rect.centerx = LANE_COORDS[1] 
-        self.rect.bottom = WINDOW_HEIGHT - 20
+        self.rect.centerx = LANE_COORDS[1]
+        self.rect.bottom  = WINDOW_HEIGHT - 20
         self.mask = pygame.mask.from_surface(self.image)
-        self.speed = 9 
+
+        # physics - SNELLER GEMAAKT
+        self.x = float(self.rect.centerx)
+        self.vx = 0.0
+        self.accel = 1.8         # Was 1.2 -> Nu sneller optrekken
+        self.friction = 0.85
+        self.max_side_speed = 25.0 # Was 20.0 -> Nu hogere topsnelheid zijwaarts
+
         self.has_shield = False
 
-    def update(self):
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT]:
-            self.rect.x -= self.speed
-            self.image = pygame.transform.rotate(self.original_image, 5)
-            self.mask = pygame.mask.from_surface(self.image) 
-        elif keys[pygame.K_RIGHT]:
-            self.rect.x += self.speed
-            self.image = pygame.transform.rotate(self.original_image, -5)
-            self.mask = pygame.mask.from_surface(self.image)
-        else:
-            self.image = self.original_image
-            self.mask = pygame.mask.from_surface(self.image)
+        # tire marks
+        self.tire_group = tire_group
+        self.trail_timer = 0
 
-        if self.rect.left < ROAD_X + LANE_PADDING: 
+    def _spawn_tire_marks(self, road_speed):
+        offset = self.rect.width * 0.25
+        back_y = self.rect.bottom - 15
+        left_pos  = (self.rect.centerx - offset, back_y)
+        right_pos = (self.rect.centerx + offset, back_y)
+        
+        # Geef wegsnelheid mee aan spoor
+        self.tire_group.add(TireMark(left_pos, road_speed))
+        self.tire_group.add(TireMark(right_pos, road_speed))
+
+    def update(self, scroll_speed=7.0):
+        keys = pygame.key.get_pressed()
+
+        # stuurinput -> horizontale snelheid
+        if keys[pygame.K_LEFT]:
+            self.vx -= self.accel
+        if keys[pygame.K_RIGHT]:
+            self.vx += self.accel
+
+        # max snelheid begrenzen
+        if self.vx > self.max_side_speed:
+            self.vx = self.max_side_speed
+        if self.vx < -self.max_side_speed:
+            self.vx = -self.max_side_speed
+
+        # wrijving
+        self.vx *= self.friction
+
+        # positie bijwerken
+        self.x += self.vx
+        self.rect.centerx = int(self.x)
+
+        # CONTINU SPOREN (Elke 3 frames)
+        self.trail_timer += 1
+        if self.trail_timer >= 3:
+            self.trail_timer = 0
+            self._spawn_tire_marks(scroll_speed)
+
+        # auto licht kantelen
+        angle = -self.vx * 0.8
+        self.image = pygame.transform.rotate(self.original_image, angle)
+        self.rect = self.image.get_rect(center=self.rect.center)
+        self.mask = pygame.mask.from_surface(self.image)
+
+        # binnen de weg blijven
+        if self.rect.left < ROAD_X + LANE_PADDING:
             self.rect.left = ROAD_X + LANE_PADDING
-        if self.rect.right > ROAD_X + ROAD_WIDTH - LANE_PADDING: 
+            self.x = self.rect.centerx
+            self.vx = 0
+        if self.rect.right > ROAD_X + ROAD_WIDTH - LANE_PADDING:
             self.rect.right = ROAD_X + ROAD_WIDTH - LANE_PADDING
+            self.x = self.rect.centerx
+            self.vx = 0
 
 class EnemyCar(pygame.sprite.Sprite):
     def __init__(self, speed):
         pygame.sprite.Sprite.__init__(self)
         
-        # 10% Chance for "Green Sport" (Rare)
         if random.random() < 0.10:
             selected_car = "assets/sport_green.png"
         else:
@@ -385,7 +479,6 @@ def draw_background(surface, scroll_y):
 # --- 6. USERNAME & LEADERBOARD SCREENS ---
 
 def get_username():
-    """Forces user to enter a name if not set."""
     if GAME_DATA["username"]:
         return 
     
@@ -410,7 +503,6 @@ def get_username():
                     if len(text) > 0:
                         GAME_DATA["username"] = text
                         save_data(GAME_DATA)
-                        # PLAY START SOUND HERE
                         if START_SFX and GAME_DATA["sound"]:
                             START_SFX.play()
                         done = True
@@ -497,7 +589,6 @@ def shop():
             price = car["price"]
             image_path = car["image"]
             
-            # --- UPDATED SHOP VISUALS ---
             try:
                 car_preview = pygame.image.load(image_path).convert_alpha()
                 asp = car_preview.get_height() / car_preview.get_width()
@@ -557,24 +648,33 @@ def shop():
         pygame.display.update()
 
 def play():
-    pygame.mouse.set_visible(False) 
+    pygame.mouse.set_visible(True) # Show mouse for pause menu
     clock = pygame.time.Clock()
     
     equipped_id = GAME_DATA["equipped"]
     car_info = next(item for item in CAR_SHOP if item["id"] == equipped_id)
     image_path = car_info["image"]
     
+    # --- GROEPEN EN SETUP ---
     all_sprites = pygame.sprite.Group()
     enemies = pygame.sprite.Group()
     coins = pygame.sprite.Group()
     powerups = pygame.sprite.Group()
-    smoke_group = pygame.sprite.Group() 
+    smoke_group = pygame.sprite.Group()
+    tire_group  = pygame.sprite.Group()   # NIEUW
+    snow_group  = pygame.sprite.Group()   # NIEUW
     
-    player = PlayerCar(image_path) 
+    # Sneeuwvlokken aanmaken
+    for _ in range(200):
+        snow_group.add(SnowParticle())
+    
+    # Speler maken (met tire_group)
+    player = PlayerCar(image_path, tire_group) 
     all_sprites.add(player)
 
     game_over = False
     crashed = False
+    paused = False 
     score = 0
     coins_collected = 0
     
@@ -594,6 +694,8 @@ def play():
     score_saved = False
 
     while True:
+        MOUSE_POS = pygame.mouse.get_pos()
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 GAME_DATA["coins"] += coins_collected
@@ -602,14 +704,30 @@ def play():
                 sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    if not score_saved: 
-                        GAME_DATA["coins"] += coins_collected
-                        save_data(GAME_DATA)
-                    main_menu()
+                    if not game_over:
+                        paused = not paused # Toggle pause
+                    else:
+                        if not score_saved: 
+                            GAME_DATA["coins"] += coins_collected
+                            save_data(GAME_DATA)
+                        main_menu()
                 if event.key == pygame.K_r and game_over:
                     play() 
+            
+            # --- PAUSE MENU BUTTONS ---
+            if event.type == pygame.MOUSEBUTTONDOWN and paused:
+                if RESUME_BTN.checkForInput(MOUSE_POS):
+                    paused = False
+                if MENU_BTN.checkForInput(MOUSE_POS):
+                    # Save progress before quitting to menu
+                    GAME_DATA["coins"] += coins_collected
+                    save_data(GAME_DATA)
+                    main_menu()
 
-        if not game_over:
+        if not game_over and not paused:
+            # Hide mouse during active gameplay
+            pygame.mouse.set_visible(False)
+            
             if countdown:
                 now = pygame.time.get_ticks()
                 elapsed = now - countdown_start_time
@@ -625,15 +743,13 @@ def play():
                 scroll_offset += scroll_speed
                 score += 1
                 
-                if score >= 5000 and 3 not in GAME_DATA["inventory"]:
+                if score >= 200 and 3 not in GAME_DATA["inventory"]:
                     GAME_DATA["inventory"].append(3)
                     save_data(GAME_DATA)
                     unlock_message_timer = 180 
 
                 target_spawn_rate = 70 - (scroll_speed * 1.8)
                 spawn_rate = max(15, int(target_spawn_rate))
-
-                player.speed = int(WINDOW_WIDTH * 0.01) + int(scroll_speed * 0.4)
 
                 smoke_timer += 1
                 if smoke_timer >= 4: 
@@ -691,16 +807,21 @@ def play():
                     else:
                         shield_orb.kill()
 
-                player.update()
+                # --- UPDATES AANROEPEN ---
+                # HIER: player update krijgt scroll_speed mee
+                player.update(scroll_speed) 
+                
                 enemies.update()
                 coins.update()
                 powerups.update() 
                 smoke_group.update()
+                tire_group.update()      # NIEUW
+                snow_group.update()      # NIEUW
                 all_sprites.update()
 
                 hits = pygame.sprite.spritecollide(player, coins, True, pygame.sprite.collide_mask)
                 for hit in hits:
-                    if COIN_SFX and GAME_DATA["sound"]: COIN_SFX.play() # PLAY SOUND
+                    if COIN_SFX and GAME_DATA["sound"]: COIN_SFX.play()
                     coins_collected += 1
                     score += 100 
                     if scroll_speed < MAX_SPEED:
@@ -708,7 +829,7 @@ def play():
 
                 shield_hits = pygame.sprite.spritecollide(player, powerups, True, pygame.sprite.collide_mask)
                 for hit in shield_hits:
-                    if POWERUP_SFX and GAME_DATA["sound"]: POWERUP_SFX.play() # PLAY SOUND
+                    if POWERUP_SFX and GAME_DATA["sound"]: POWERUP_SFX.play()
                     player.has_shield = True 
 
                 enemy_hits = pygame.sprite.spritecollide(player, enemies, False, pygame.sprite.collide_mask)
@@ -728,7 +849,11 @@ def play():
                         player.kill()
                         smoke_group.empty() 
 
+        # --- DRAWING ---
         draw_background(SCREEN, scroll_offset)
+        
+        snow_group.draw(SCREEN)      # NIEUW
+        tire_group.draw(SCREEN)      # NIEUW
         smoke_group.draw(SCREEN)
         all_sprites.draw(SCREEN)
 
@@ -740,7 +865,7 @@ def play():
         SCREEN.blit(score_text, (20, 20))
         SCREEN.blit(coin_text, (20, 60))
 
-        if countdown:
+        if countdown and not paused:
             now = pygame.time.get_ticks()
             elapsed = now - countdown_start_time
             count_text = ""
@@ -763,7 +888,28 @@ def play():
                 SCREEN.blit(outline_surf, (center_rect.x+4, center_rect.y+4))
                 SCREEN.blit(txt_surf, center_rect)
 
-        if unlock_message_timer > 0:
+        # --- PAUSE OVERLAY ---
+        if paused:
+            pygame.mouse.set_visible(True) # Show mouse to click buttons
+            overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
+            overlay.set_alpha(128) # Transparent black
+            overlay.fill((0, 0, 0))
+            SCREEN.blit(overlay, (0, 0))
+            
+            pause_txt = get_font(60).render("PAUSED", True, "White")
+            SCREEN.blit(pause_txt, (WINDOW_WIDTH//2 - pause_txt.get_width()//2, WINDOW_HEIGHT//2 - 100))
+            
+            RESUME_BTN = Button(image=None, pos=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2), 
+                                text_input="RESUME", font=get_font(40), base_color="White", hovering_color="Green")
+            MENU_BTN = Button(image=None, pos=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2 + 70), 
+                              text_input="MAIN MENU", font=get_font(40), base_color="White", hovering_color="Red")
+            
+            RESUME_BTN.changeColor(MOUSE_POS)
+            RESUME_BTN.update(SCREEN)
+            MENU_BTN.changeColor(MOUSE_POS)
+            MENU_BTN.update(SCREEN)
+
+        if unlock_message_timer > 0 and not paused:
             unlock_message_timer -= 1
             if (unlock_message_timer // 10) % 2 == 0:
                 msg = get_font(40).render("SECRET UNLOCKED: X-MAS SLED!", True, (0, 255, 0))
@@ -772,6 +918,7 @@ def play():
                 SCREEN.blit(msg, rect)
 
         if game_over:
+            pygame.mouse.set_visible(True)
             if not score_saved:
                 GAME_DATA["coins"] += coins_collected
                 GAME_DATA["leaderboard"].append({"name": GAME_DATA["username"], "score": score})
@@ -813,24 +960,24 @@ def main_menu():
         SCREEN.blit(user_txt, (10, 10))
 
         PLAY_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 200), 
-                            text_input="PLAY", font=get_font(50), base_color="#d7fcd4", hovering_color="White")
+                             text_input="PLAY", font=get_font(50), base_color="#d7fcd4", hovering_color="White")
         
         CARS_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 280), 
-                            text_input="CARS", font=get_font(50), base_color="#d7fcd4", hovering_color="White")
+                             text_input="CARS", font=get_font(50), base_color="#d7fcd4", hovering_color="White")
         
         LEADER_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 360), 
-                            text_input="LEADERBOARD", font=get_font(40), base_color="#d7fcd4", hovering_color="White")
+                             text_input="LEADERBOARD", font=get_font(40), base_color="#d7fcd4", hovering_color="White")
 
         sound_text = "SOUND: ON" if GAME_DATA["sound"] else "SOUND: OFF"
         sound_color = "White" if GAME_DATA["sound"] else "Gray"
         SOUND_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 440), 
-                            text_input=sound_text, font=get_font(40), base_color=sound_color, hovering_color="Green")
+                             text_input=sound_text, font=get_font(40), base_color=sound_color, hovering_color="Green")
 
         QUIT_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 520), 
-                            text_input="QUIT", font=get_font(50), base_color="#d7fcd4", hovering_color="White")
+                             text_input="QUIT", font=get_font(50), base_color="#d7fcd4", hovering_color="White")
 
         RESET_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 580), 
-                            text_input="RESET PROGRESS", font=get_font(30), base_color="Red", hovering_color="#ff5555")
+                             text_input="RESET PROGRESS", font=get_font(30), base_color="Red", hovering_color="#ff5555")
 
         SCREEN.blit(MENU_TEXT, MENU_RECT)
 
