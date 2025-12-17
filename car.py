@@ -27,19 +27,41 @@ def get_font(size):
     except:
         return pygame.font.SysFont("Arial", size, bold=True)
 
+# --- SOUND EFFECTS LOADING ---
+# We try to load the sounds. If they don't exist, the game won't crash.
 try:
-    BG = pygame.image.load("assets/Background.png").convert()
-    BG = pygame.transform.scale(BG, (WINDOW_WIDTH, WINDOW_HEIGHT))
+    COIN_SFX = pygame.mixer.Sound("assets/coin.mp3")
+    COIN_SFX.set_volume(0.6)
 except:
-    BG = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
-    BG.fill((30, 100, 30))
+    COIN_SFX = None
+    print("Warning: assets/coin.mp3 not found")
 
+try:
+    POWERUP_SFX = pygame.mixer.Sound("assets/powerup.mp3")
+    POWERUP_SFX.set_volume(0.7)
+except:
+    POWERUP_SFX = None
+    print("Warning: assets/powerup.mp3 not found")
+
+try:
+    START_SFX = pygame.mixer.Sound("assets/start.mp3")
+    START_SFX.set_volume(1.0)
+except:
+    START_SFX = None
+    print("Warning: assets/start.mp3 not found")
+
+# --- MAP LOADING ---
 try:
     ROAD_IMG = pygame.image.load("assets/road_bg.png").convert()
     ROAD_IMG = pygame.transform.scale(ROAD_IMG, (WINDOW_WIDTH, WINDOW_HEIGHT))
     USE_CUSTOM_ROAD = True
+    BG = ROAD_IMG 
 except:
+    ROAD_IMG = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
+    ROAD_IMG.fill((30, 30, 30))
+    pygame.draw.rect(ROAD_IMG, (50, 50, 50), (WINDOW_WIDTH//6, 0, WINDOW_WIDTH*0.66, WINDOW_HEIGHT))
     USE_CUSTOM_ROAD = False
+    BG = ROAD_IMG
 
 # --- 3. SAVE SYSTEM & DATA ---
 
@@ -51,6 +73,8 @@ CAR_SHOP = [
 ]
 
 default_data = {
+    "username": "", 
+    "leaderboard": [], 
     "coins": 0,
     "inventory": [0], 
     "equipped": 0,
@@ -74,7 +98,9 @@ def save_data(data):
 
 def reset_progress():
     global GAME_DATA
+    current_name = GAME_DATA["username"]
     GAME_DATA = default_data.copy()
+    GAME_DATA["username"] = current_name
     save_data(GAME_DATA)
     pygame.mixer.music.unpause()
     if not pygame.mixer.music.get_busy():
@@ -95,13 +121,8 @@ except:
 
 # --- 5. CLASSES & MATH ---
 
-# DYNAMIC ROAD WIDTH
-# We assume the road takes up about 75% of the screen width visually.
 ROAD_WIDTH      = int(WINDOW_WIDTH * 0.75) 
-
-# Adjust padding relative to screen size (approx 4% of road)
 LANE_PADDING    = int(ROAD_WIDTH * 0.04) 
-
 REAL_ROAD_WIDTH = ROAD_WIDTH - (LANE_PADDING * 2)
 LANE_WIDTH      = REAL_ROAD_WIDTH // 4  
 ROAD_X          = (WINDOW_WIDTH - ROAD_WIDTH) // 2 
@@ -206,8 +227,14 @@ class PlayerCar(pygame.sprite.Sprite):
 class EnemyCar(pygame.sprite.Sprite):
     def __init__(self, speed):
         pygame.sprite.Sprite.__init__(self)
-        car_options = ["assets/coupe_green.png", "assets/coupe_red.png", "assets/coupe_midnight.png"]
-        selected_car = random.choice(car_options)
+        
+        # 10% Chance for "Green Sport" (Rare)
+        if random.random() < 0.10:
+            selected_car = "assets/sport_green.png"
+        else:
+            options = ["assets/sport_red.png", "assets/sport_yellow.png", "assets/sport_blue.png"]
+            selected_car = random.choice(options)
+            
         try:
             raw_image = pygame.image.load(selected_car).convert_alpha()
             target_width = int(LANE_WIDTH * 0.55)
@@ -266,6 +293,7 @@ class WarningSign(pygame.sprite.Sprite):
             enemy = EnemyCar(self.car_speed)
             enemy.rect.centerx = self.lane_x 
             enemy.rect.bottom = -20 
+            pygame.sprite.spritecollide(enemy, self.enemy_group, True) 
             self.enemy_group.add(enemy)
             self.sprite_group.add(enemy)
             self.kill()
@@ -312,13 +340,16 @@ class Coin(pygame.sprite.Sprite):
             self.kill()
 
 class Explosion(pygame.sprite.Sprite):
-    def __init__(self, center):
+    def __init__(self, center, style="fire"):
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.Surface((300, 300), pygame.SRCALPHA)
         self.rect = self.image.get_rect(center=center)
         self.lifetime = 40 
         self.particles = []
-        colors = [(255, 255, 0), (255, 100, 0), (255, 0, 0), (80, 80, 80), (255, 255, 255)]
+        if style == "blue":
+            colors = [(0, 255, 255), (0, 150, 255), (0, 50, 255), (200, 200, 255), (255, 255, 255)]
+        else:
+            colors = [(255, 255, 0), (255, 100, 0), (255, 0, 0), (80, 80, 80), (255, 255, 255)]
         for _ in range(40):
             x, y = 150, 150 
             vx = random.randint(-8, 8) 
@@ -351,12 +382,95 @@ def draw_background(surface, scroll_y):
         pygame.draw.line(surface, (255, 255, 255), (ROAD_X, 0), (ROAD_X, WINDOW_HEIGHT), 5)
         pygame.draw.line(surface, (255, 255, 255), (ROAD_X + ROAD_WIDTH, 0), (ROAD_X + ROAD_WIDTH, WINDOW_HEIGHT), 5)
 
-# --- 6. GAME LOOPS (SHOP & PLAY) ---
+# --- 6. USERNAME & LEADERBOARD SCREENS ---
+
+def get_username():
+    """Forces user to enter a name if not set."""
+    if GAME_DATA["username"]:
+        return 
+    
+    input_box = pygame.Rect(WINDOW_WIDTH//2 - 150, WINDOW_HEIGHT//2, 300, 50)
+    color_inactive = pygame.Color('lightskyblue3')
+    color_active = pygame.Color('dodgerblue2')
+    color = color_active
+    text = ''
+    done = False
+    
+    while not done:
+        SCREEN.fill((30, 30, 30))
+        title = get_font(50).render("ENTER USERNAME", True, (255, 255, 255))
+        SCREEN.blit(title, (WINDOW_WIDTH//2 - title.get_width()//2, WINDOW_HEIGHT//2 - 100))
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    if len(text) > 0:
+                        GAME_DATA["username"] = text
+                        save_data(GAME_DATA)
+                        # PLAY START SOUND HERE
+                        if START_SFX and GAME_DATA["sound"]:
+                            START_SFX.play()
+                        done = True
+                elif event.key == pygame.K_BACKSPACE:
+                    text = text[:-1]
+                else:
+                    if len(text) < 10:
+                        text += event.unicode
+        
+        txt_surface = get_font(40).render(text, True, color)
+        SCREEN.blit(txt_surface, (input_box.x + 5, input_box.y + 5))
+        pygame.draw.rect(SCREEN, color, input_box, 2)
+        pygame.display.flip()
+
+def leaderboard():
+    while True:
+        SCREEN.blit(BG, (0, 0))
+        MOUSE_POS = pygame.mouse.get_pos()
+        
+        TITLE = get_font(60).render("LEADERBOARD", True, "#b68f40")
+        TITLE_RECT = TITLE.get_rect(center=(WINDOW_WIDTH // 2, 80))
+        SCREEN.blit(TITLE, TITLE_RECT)
+        
+        BACK_BTN = Button(image=None, pos=(WINDOW_WIDTH // 2, WINDOW_HEIGHT - 80), 
+                          text_input="BACK", font=get_font(40), base_color="White", hovering_color="Green")
+        BACK_BTN.changeColor(MOUSE_POS)
+        BACK_BTN.update(SCREEN)
+        
+        leader_list = GAME_DATA.get("leaderboard", [])
+        start_y = 180
+        
+        if not leader_list:
+            no_score = get_font(30).render("No High Scores Yet!", True, "White")
+            SCREEN.blit(no_score, (WINDOW_WIDTH//2 - no_score.get_width()//2, start_y))
+        else:
+            for i, entry in enumerate(leader_list[:5]):
+                name = entry['name']
+                score = entry['score']
+                score_str = f"{i+1}. {name}: {score}"
+                
+                txt = get_font(35).render(score_str, True, (255, 215, 0))
+                SCREEN.blit(txt, (WINDOW_WIDTH//2 - txt.get_width()//2, start_y))
+                start_y += 60
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if BACK_BTN.checkForInput(MOUSE_POS):
+                    return 
+
+        pygame.display.update()
+
+# --- 7. GAME LOOPS (SHOP & PLAY) ---
 
 def shop():
     pygame.mouse.set_visible(True) 
     while True:
-        SCREEN.fill((0, 0, 0))
+        SCREEN.blit(BG, (0, 0))
         MOUSE_POS = pygame.mouse.get_pos()
 
         TITLE = get_font(50).render("CAR SHOP", True, (255, 255, 255))
@@ -381,7 +495,20 @@ def shop():
             car_id = car["id"]
             name = car["name"]
             price = car["price"]
+            image_path = car["image"]
             
+            # --- UPDATED SHOP VISUALS ---
+            try:
+                car_preview = pygame.image.load(image_path).convert_alpha()
+                asp = car_preview.get_height() / car_preview.get_width()
+                car_preview = pygame.transform.scale(car_preview, (150, int(150*asp)))
+            except:
+                car_preview = pygame.Surface((150, 80))
+                car_preview.fill((100,100,100))
+            
+            preview_rect = car_preview.get_rect(center=(WINDOW_WIDTH * 0.25, y_pos))
+            SCREEN.blit(car_preview, preview_rect)
+
             if car_id == GAME_DATA["equipped"]:
                 status_text = "EQUIPPED"
                 color = (0, 255, 0)
@@ -392,15 +519,16 @@ def shop():
                 status_text = f"BUY ({price})"
                 color = (200, 0, 0)
 
-            NAME_TXT = get_font(30).render(name, True, (255, 255, 255))
-            SCREEN.blit(NAME_TXT, (200, y_pos))
+            NAME_TXT = get_font(40).render(name, True, (255, 255, 255))
+            NAME_RECT = NAME_TXT.get_rect(center=(WINDOW_WIDTH * 0.5, y_pos))
+            SCREEN.blit(NAME_TXT, NAME_RECT)
 
-            BTN = Button(image=None, pos=(600, y_pos + 15), 
+            BTN = Button(image=None, pos=(WINDOW_WIDTH * 0.75, y_pos), 
                          text_input=status_text, font=get_font(30), base_color=color, hovering_color="Gray")
             BTN.changeColor(MOUSE_POS)
             BTN.update(SCREEN)
             buttons.append({"btn": BTN, "id": car_id, "price": price})
-            y_pos += 100 
+            y_pos += 150 
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -461,9 +589,9 @@ def play():
     smoke_timer = 0
     unlock_message_timer = 0
 
-    # --- COUNTDOWN VARIABLES ---
     countdown = True
     countdown_start_time = pygame.time.get_ticks()
+    score_saved = False
 
     while True:
         for event in pygame.event.get():
@@ -474,12 +602,11 @@ def play():
                 sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    GAME_DATA["coins"] += coins_collected
-                    save_data(GAME_DATA)
+                    if not score_saved: 
+                        GAME_DATA["coins"] += coins_collected
+                        save_data(GAME_DATA)
                     main_menu()
                 if event.key == pygame.K_r and game_over:
-                    GAME_DATA["coins"] += coins_collected
-                    save_data(GAME_DATA)
                     play() 
 
         if not game_over:
@@ -498,7 +625,7 @@ def play():
                 scroll_offset += scroll_speed
                 score += 1
                 
-                if score >= 15000 and 3 not in GAME_DATA["inventory"]:
+                if score >= 5000 and 3 not in GAME_DATA["inventory"]:
                     GAME_DATA["inventory"].append(3)
                     save_data(GAME_DATA)
                     unlock_message_timer = 180 
@@ -506,8 +633,6 @@ def play():
                 target_spawn_rate = 70 - (scroll_speed * 1.8)
                 spawn_rate = max(15, int(target_spawn_rate))
 
-                # Make steering speed proportional to screen width 
-                # (so it feels the same on 4k as on 800x600)
                 player.speed = int(WINDOW_WIDTH * 0.01) + int(scroll_speed * 0.4)
 
                 smoke_timer += 1
@@ -524,6 +649,11 @@ def play():
                     difficulty_factor = int(scroll_speed * 0.25)
                     final_traffic_speed = base_enemy_speed + difficulty_factor
 
+                    blocked_lanes = []
+                    for s in all_sprites:
+                        if isinstance(s, WarningSign):
+                            blocked_lanes.append(s.lane_x)
+
                     if random.random() < 0.2:
                         lane = random.choice(LANE_COORDS)
                         fast_speed = final_traffic_speed + 5
@@ -532,7 +662,10 @@ def play():
                     else:
                         speed = final_traffic_speed + random.randint(0, 3)
                         enemy = EnemyCar(speed)
-                        if not pygame.sprite.spritecollideany(enemy, enemies):
+                        
+                        if enemy.rect.centerx in blocked_lanes:
+                            enemy.kill() 
+                        elif not pygame.sprite.spritecollideany(enemy, enemies):
                             enemies.add(enemy)
                             all_sprites.add(enemy)
                         else:
@@ -549,7 +682,7 @@ def play():
                         new_coin.kill()
 
                 powerup_timer += 1
-                if powerup_timer >= 1500:
+                if powerup_timer >= 400: 
                     powerup_timer = 0
                     shield_orb = ShieldItem(scroll_speed)
                     if not pygame.sprite.spritecollideany(shield_orb, enemies):
@@ -567,6 +700,7 @@ def play():
 
                 hits = pygame.sprite.spritecollide(player, coins, True, pygame.sprite.collide_mask)
                 for hit in hits:
+                    if COIN_SFX and GAME_DATA["sound"]: COIN_SFX.play() # PLAY SOUND
                     coins_collected += 1
                     score += 100 
                     if scroll_speed < MAX_SPEED:
@@ -574,30 +708,32 @@ def play():
 
                 shield_hits = pygame.sprite.spritecollide(player, powerups, True, pygame.sprite.collide_mask)
                 for hit in shield_hits:
+                    if POWERUP_SFX and GAME_DATA["sound"]: POWERUP_SFX.play() # PLAY SOUND
                     player.has_shield = True 
 
                 enemy_hits = pygame.sprite.spritecollide(player, enemies, False, pygame.sprite.collide_mask)
                 if enemy_hits:
                     if player.has_shield:
                         player.has_shield = False 
+                        blue_pop = Explosion(player.rect.center, style="blue")
+                        all_sprites.add(blue_pop)
                         for enemy in enemy_hits:
-                            boom = Explosion(enemy.rect.center)
+                            boom = Explosion(enemy.rect.center, style="fire")
                             all_sprites.add(boom)
                             enemy.kill()
                     else:
                         crashed = True
-                        boom = Explosion(player.rect.center)
+                        boom = Explosion(player.rect.center, style="fire")
                         all_sprites.add(boom)
                         player.kill()
                         smoke_group.empty() 
 
-        # --- DRAWING ---
         draw_background(SCREEN, scroll_offset)
         smoke_group.draw(SCREEN)
         all_sprites.draw(SCREEN)
 
         if not crashed and not game_over and player.has_shield:
-            pygame.draw.circle(SCREEN, (0, 200, 255), player.rect.center, 50, 4)
+            pygame.draw.circle(SCREEN, (0, 200, 255), player.rect.center, 75, 4)
         
         score_text = get_font(30).render(f"SCORE: {score}", True, (255, 255, 255))
         coin_text = get_font(30).render(f"COINS: {coins_collected}", True, (255, 215, 0))
@@ -636,6 +772,14 @@ def play():
                 SCREEN.blit(msg, rect)
 
         if game_over:
+            if not score_saved:
+                GAME_DATA["coins"] += coins_collected
+                GAME_DATA["leaderboard"].append({"name": GAME_DATA["username"], "score": score})
+                GAME_DATA["leaderboard"].sort(key=lambda x: x["score"], reverse=True)
+                GAME_DATA["leaderboard"] = GAME_DATA["leaderboard"][:10]
+                save_data(GAME_DATA)
+                score_saved = True
+
             overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
             overlay.set_alpha(180)
             overlay.fill((50, 0, 0))
@@ -652,9 +796,11 @@ def play():
         pygame.display.flip()
         clock.tick(FPS)
 
-# --- 7. MAIN MENU ---
+# --- 8. MAIN MENU ---
 
 def main_menu():
+    get_username()
+    
     pygame.mouse.set_visible(True) 
     while True:
         SCREEN.blit(BG, (0, 0))
@@ -663,26 +809,32 @@ def main_menu():
         MENU_TEXT = get_font(60).render("CrashOut Racer", True, "#b68f40")
         MENU_RECT = MENU_TEXT.get_rect(center=(WINDOW_WIDTH // 2, 80))
 
+        user_txt = get_font(20).render(f"Player: {GAME_DATA['username']}", True, "White")
+        SCREEN.blit(user_txt, (10, 10))
+
         PLAY_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 200), 
                             text_input="PLAY", font=get_font(50), base_color="#d7fcd4", hovering_color="White")
         
         CARS_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 280), 
                             text_input="CARS", font=get_font(50), base_color="#d7fcd4", hovering_color="White")
         
+        LEADER_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 360), 
+                            text_input="LEADERBOARD", font=get_font(40), base_color="#d7fcd4", hovering_color="White")
+
         sound_text = "SOUND: ON" if GAME_DATA["sound"] else "SOUND: OFF"
         sound_color = "White" if GAME_DATA["sound"] else "Gray"
-        SOUND_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 360), 
+        SOUND_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 440), 
                             text_input=sound_text, font=get_font(40), base_color=sound_color, hovering_color="Green")
 
-        QUIT_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 440), 
+        QUIT_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 520), 
                             text_input="QUIT", font=get_font(50), base_color="#d7fcd4", hovering_color="White")
 
-        RESET_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 530), 
+        RESET_BUTTON = Button(image=None, pos=(WINDOW_WIDTH // 2, 580), 
                             text_input="RESET PROGRESS", font=get_font(30), base_color="Red", hovering_color="#ff5555")
 
         SCREEN.blit(MENU_TEXT, MENU_RECT)
 
-        for button in [PLAY_BUTTON, CARS_BUTTON, SOUND_BUTTON, QUIT_BUTTON, RESET_BUTTON]:
+        for button in [PLAY_BUTTON, CARS_BUTTON, LEADER_BUTTON, SOUND_BUTTON, QUIT_BUTTON, RESET_BUTTON]:
             button.changeColor(MOUSE_POS)
             button.update(SCREEN)
         
@@ -690,11 +842,20 @@ def main_menu():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
+            
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_l:
+                    GAME_DATA["leaderboard"] = []
+                    save_data(GAME_DATA)
+                    print("Leaderboard reset!")
+
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if PLAY_BUTTON.checkForInput(MOUSE_POS):
                     play() 
                 if CARS_BUTTON.checkForInput(MOUSE_POS):
                     shop() 
+                if LEADER_BUTTON.checkForInput(MOUSE_POS):
+                    leaderboard()
                 if QUIT_BUTTON.checkForInput(MOUSE_POS):
                     pygame.quit()
                     sys.exit()
@@ -713,6 +874,8 @@ def main_menu():
 
                 if RESET_BUTTON.checkForInput(MOUSE_POS):
                     reset_progress()
+                    GAME_DATA["username"] = ""
+                    get_username()
 
         pygame.display.update()
 
