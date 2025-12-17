@@ -498,7 +498,7 @@ def play():
                 scroll_offset += scroll_speed
                 score += 1
                 
-                if score >= 15000 and 3 not in GAME_DATA["inventory"]:
+                if score >= 5000 and 3 not in GAME_DATA["inventory"]:
                     GAME_DATA["inventory"].append(3)
                     save_data(GAME_DATA)
                     unlock_message_timer = 180 
