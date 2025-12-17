@@ -19,9 +19,3 @@ def main():
         pygame.display.flip()
 
     pygame.quit()
-
-<<<<<<< HEAD
-main()
-=======
-main() 
->>>>>>> 40f2d98b087b2f2e6237dbb42ae7e5c9927d294f
