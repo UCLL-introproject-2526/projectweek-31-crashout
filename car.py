@@ -214,24 +214,21 @@ class TireMark(pygame.sprite.Sprite):
         super().__init__()
         w, h = 6, 12
         self.image = pygame.Surface((w, h), pygame.SRCALPHA)
-        # Donkergrijze kleur, transparant
         self.image.fill((30, 30, 30, 120))
         self.rect = self.image.get_rect(center=pos)
         self.lifetime = 100
-        self.speed = speed # Snelheid van de weg
+        self.speed = speed
 
     def update(self):
-        # Beweeg mee met de weg (naar beneden)
         self.rect.y += self.speed 
         self.lifetime -= 1
         if self.lifetime <= 0:
             self.kill()
         elif self.lifetime < 20:
-            # Langzaam vervagen
             alpha = int(120 * (self.lifetime / 20))
             self.image.set_alpha(alpha)
 
-# --- VERNIEUWDE SPELER CLASS (MET SNELLERE MOVEMENT) ---
+# --- VERNIEUWDE SPELER CLASS ---
 
 class PlayerCar(pygame.sprite.Sprite):
     def __init__(self, image_path, tire_group):
@@ -252,16 +249,14 @@ class PlayerCar(pygame.sprite.Sprite):
         self.rect.bottom  = WINDOW_HEIGHT - 20
         self.mask = pygame.mask.from_surface(self.image)
 
-        # physics - SNELLER GEMAAKT
         self.x = float(self.rect.centerx)
         self.vx = 0.0
-        self.accel = 1.8         # Was 1.2 -> Nu sneller optrekken
+        self.accel = 1.8
         self.friction = 0.85
-        self.max_side_speed = 25.0 # Was 20.0 -> Nu hogere topsnelheid zijwaarts
+        self.max_side_speed = 25.0
 
         self.has_shield = False
 
-        # tire marks
         self.tire_group = tire_group
         self.trail_timer = 0
 
@@ -270,46 +265,37 @@ class PlayerCar(pygame.sprite.Sprite):
         back_y = self.rect.bottom - 15
         left_pos  = (self.rect.centerx - offset, back_y)
         right_pos = (self.rect.centerx + offset, back_y)
-        
-        # Geef wegsnelheid mee aan spoor
         self.tire_group.add(TireMark(left_pos, road_speed))
         self.tire_group.add(TireMark(right_pos, road_speed))
 
     def update(self, scroll_speed=7.0):
         keys = pygame.key.get_pressed()
 
-        # stuurinput -> horizontale snelheid
         if keys[pygame.K_LEFT]:
             self.vx -= self.accel
         if keys[pygame.K_RIGHT]:
             self.vx += self.accel
 
-        # max snelheid begrenzen
         if self.vx > self.max_side_speed:
             self.vx = self.max_side_speed
         if self.vx < -self.max_side_speed:
             self.vx = -self.max_side_speed
 
-        # wrijving
         self.vx *= self.friction
 
-        # positie bijwerken
         self.x += self.vx
         self.rect.centerx = int(self.x)
 
-        # CONTINU SPOREN (Elke 3 frames)
         self.trail_timer += 1
         if self.trail_timer >= 3:
             self.trail_timer = 0
             self._spawn_tire_marks(scroll_speed)
 
-        # auto licht kantelen
         angle = -self.vx * 0.8
         self.image = pygame.transform.rotate(self.original_image, angle)
         self.rect = self.image.get_rect(center=self.rect.center)
         self.mask = pygame.mask.from_surface(self.image)
 
-        # binnen de weg blijven
         if self.rect.left < ROAD_X + LANE_PADDING:
             self.rect.left = ROAD_X + LANE_PADDING
             self.x = self.rect.centerx
@@ -475,6 +461,45 @@ def draw_background(surface, scroll_y):
         pygame.draw.rect(surface, (50, 50, 50), (ROAD_X, 0, ROAD_WIDTH, WINDOW_HEIGHT))
         pygame.draw.line(surface, (255, 255, 255), (ROAD_X, 0), (ROAD_X, WINDOW_HEIGHT), 5)
         pygame.draw.line(surface, (255, 255, 255), (ROAD_X + ROAD_WIDTH, 0), (ROAD_X + ROAD_WIDTH, WINDOW_HEIGHT), 5)
+
+# --- FIGHT & TRANSITION KOPPELING ---
+
+def start_fight():
+    """
+    Hier start je jullie aparte fight-game.
+    Pas de import en functie hieronder aan naar jullie echte fight code.
+    """
+    import fight_game  # <--- vervang met de naam van jullie fight-module
+    fight_game.main()  # <--- vervang met de start-functie van jullie fight scene
+
+def crash_transition():
+    """Transition na crash voordat de fight scene start."""
+    clock = pygame.time.Clock()
+    duration = 120  # ~2 seconden
+
+    t = 0
+    while t < duration:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+        alpha = int(255 * (t / duration))
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
+        overlay.fill((80, 0, 0))
+        overlay.set_alpha(alpha)
+        SCREEN.blit(overlay, (0, 0))
+
+        scale = 1.0 + (t / duration)
+        txt = get_font(int(60 * scale)).render("CRASH!", True, (255, 255, 255))
+        rect = txt.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
+        SCREEN.blit(txt, rect)
+
+        pygame.display.flip()
+        clock.tick(FPS)
+        t += 1
+
+    start_fight()
 
 # --- 6. USERNAME & LEADERBOARD SCREENS ---
 
@@ -648,27 +673,24 @@ def shop():
         pygame.display.update()
 
 def play():
-    pygame.mouse.set_visible(True) # Show mouse for pause menu
+    pygame.mouse.set_visible(True) 
     clock = pygame.time.Clock()
     
     equipped_id = GAME_DATA["equipped"]
     car_info = next(item for item in CAR_SHOP if item["id"] == equipped_id)
     image_path = car_info["image"]
     
-    # --- GROEPEN EN SETUP ---
     all_sprites = pygame.sprite.Group()
     enemies = pygame.sprite.Group()
     coins = pygame.sprite.Group()
     powerups = pygame.sprite.Group()
     smoke_group = pygame.sprite.Group()
-    tire_group  = pygame.sprite.Group()   # NIEUW
-    snow_group  = pygame.sprite.Group()   # NIEUW
+    tire_group  = pygame.sprite.Group()
+    snow_group  = pygame.sprite.Group()
     
-    # Sneeuwvlokken aanmaken
     for _ in range(200):
         snow_group.add(SnowParticle())
     
-    # Speler maken (met tire_group)
     player = PlayerCar(image_path, tire_group) 
     all_sprites.add(player)
 
@@ -705,7 +727,7 @@ def play():
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     if not game_over:
-                        paused = not paused # Toggle pause
+                        paused = not paused
                     else:
                         if not score_saved: 
                             GAME_DATA["coins"] += coins_collected
@@ -714,18 +736,15 @@ def play():
                 if event.key == pygame.K_r and game_over:
                     play() 
             
-            # --- PAUSE MENU BUTTONS ---
             if event.type == pygame.MOUSEBUTTONDOWN and paused:
                 if RESUME_BTN.checkForInput(MOUSE_POS):
                     paused = False
                 if MENU_BTN.checkForInput(MOUSE_POS):
-                    # Save progress before quitting to menu
                     GAME_DATA["coins"] += coins_collected
                     save_data(GAME_DATA)
                     main_menu()
 
         if not game_over and not paused:
-            # Hide mouse during active gameplay
             pygame.mouse.set_visible(False)
             
             if countdown:
@@ -743,7 +762,7 @@ def play():
                 scroll_offset += scroll_speed
                 score += 1
                 
-                if score >= 200 and 3 not in GAME_DATA["inventory"]:
+                if score >= 5000 and 3 not in GAME_DATA["inventory"]:
                     GAME_DATA["inventory"].append(3)
                     save_data(GAME_DATA)
                     unlock_message_timer = 180 
@@ -807,16 +826,14 @@ def play():
                     else:
                         shield_orb.kill()
 
-                # --- UPDATES AANROEPEN ---
-                # HIER: player update krijgt scroll_speed mee
                 player.update(scroll_speed) 
                 
                 enemies.update()
                 coins.update()
                 powerups.update() 
                 smoke_group.update()
-                tire_group.update()      # NIEUW
-                snow_group.update()      # NIEUW
+                tire_group.update()
+                snow_group.update()
                 all_sprites.update()
 
                 hits = pygame.sprite.spritecollide(player, coins, True, pygame.sprite.collide_mask)
@@ -849,11 +866,26 @@ def play():
                         player.kill()
                         smoke_group.empty() 
 
-        # --- DRAWING ---
+                        # KORTE EXPLOSIE, DAN TRANSITION + FIGHT
+                        crash_timer = pygame.time.get_ticks()
+                        while pygame.time.get_ticks() - crash_timer < 500:
+                            draw_background(SCREEN, scroll_offset)
+                            snow_group.draw(SCREEN)
+                            tire_group.draw(SCREEN)
+                            smoke_group.update()
+                            smoke_group.draw(SCREEN)
+                            all_sprites.update()
+                            all_sprites.draw(SCREEN)
+                            pygame.display.flip()
+                            clock.tick(FPS)
+
+                        crash_transition()
+                        return  # stop de race-loop; fight-game neemt het over
+
         draw_background(SCREEN, scroll_offset)
         
-        snow_group.draw(SCREEN)      # NIEUW
-        tire_group.draw(SCREEN)      # NIEUW
+        snow_group.draw(SCREEN)
+        tire_group.draw(SCREEN)
         smoke_group.draw(SCREEN)
         all_sprites.draw(SCREEN)
 
@@ -888,11 +920,10 @@ def play():
                 SCREEN.blit(outline_surf, (center_rect.x+4, center_rect.y+4))
                 SCREEN.blit(txt_surf, center_rect)
 
-        # --- PAUSE OVERLAY ---
         if paused:
-            pygame.mouse.set_visible(True) # Show mouse to click buttons
+            pygame.mouse.set_visible(True)
             overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
-            overlay.set_alpha(128) # Transparent black
+            overlay.set_alpha(128)
             overlay.fill((0, 0, 0))
             SCREEN.blit(overlay, (0, 0))
             
