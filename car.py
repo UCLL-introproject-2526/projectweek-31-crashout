@@ -226,7 +226,7 @@ class PlayerCar(pygame.sprite.Sprite):
         super().__init__()
         try:
             raw_image = pygame.image.load(image_path).convert_alpha()
-            target_width = int(LANE_WIDTH * 1.2)
+            target_width = int(LANE_WIDTH * 1.1  )
             scale = target_width / raw_image.get_width()
             new_h = int(raw_image.get_height() * scale)
             self.original_image = pygame.transform.scale(raw_image, (target_width, new_h))
