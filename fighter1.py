@@ -71,37 +71,37 @@ class Fighter():
                             self.attack_type = 1
                         if key[pygame.K_p]:
                             self.attack_type = 2
-            else:
-                # --- VERBETERDE AI LOGICA ---
-                dist_x = target.rect.centerx - self.rect.centerx
-                dist_y = target.rect.centery - self.rect.centery
+            # else:
+            #     # --- VERBETERDE AI LOGICA ---
+            #     dist_x = target.rect.centerx - self.rect.centerx
+            #     dist_y = target.rect.centery - self.rect.centery
 
-                # 1. AFSTAND BEPALEN (AI gedrag baseren op afstand)
-                # Dichtbij: Aanvallen
-                if abs(dist_x) < 250:
-                    if self.attack_cooldown == 0:
-                        # Kies willekeurig tussen aanval 1 of 2
-                        self.attack_type = random.choice([1, 2])
-                        self.attack(target)
-                # Middelmatig: Naar de speler toe lopen
-                elif abs(dist_x) > 200:
-                    if dist_x > 0:
-                        dx = SPEED
-                    else:
-                        dx = -SPEED
-                    self.running = True
+            #     # 1. AFSTAND BEPALEN (AI gedrag baseren op afstand)
+            #     # Dichtbij: Aanvallen
+            #     if abs(dist_x) < 250:
+            #         if self.attack_cooldown == 0:
+            #             # Kies willekeurig tussen aanval 1 of 2
+            #             self.attack_type = random.choice([1, 2])
+            #             self.attack(target)
+            #     # Middelmatig: Naar de speler toe lopen
+            #     elif abs(dist_x) > 200:
+            #         if dist_x > 0:
+            #             dx = SPEED
+            #         else:
+            #             dx = -SPEED
+            #         self.running = True
 
-                # 2. DEFENSIEF GEDRAG (Springen of ontwijken)
-                # Als de speler aanvalt en de AI is dichtbij, kleine kans om te springen
-                if target.attacking and abs(dist_x) < 150:
-                    if not self.jump and random.random() < 0.05:
-                        self.vel_y = -30
-                        self.jump = True
+            #     # 2. DEFENSIEF GEDRAG (Springen of ontwijken)
+            #     # Als de speler aanvalt en de AI is dichtbij, kleine kans om te springen
+            #     if target.attacking and abs(dist_x) < 150:
+            #         if not self.jump and random.random() < 0.05:
+            #             self.vel_y = -30
+            #             self.jump = True
 
-                # 3. RANDOM JUMP (Om het minder voorspelbaar te maken)
-                if not self.jump and random.random() < 0.005:
-                    self.vel_y = -30
-                    self.jump = True
+            #     # 3. RANDOM JUMP (Om het minder voorspelbaar te maken)
+            #     if not self.jump and random.random() < 0.005:
+            #         self.vel_y = -30
+            #         self.jump = True
 
 
 
