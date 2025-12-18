@@ -9,15 +9,18 @@ pygame.init()
 pygame.mixer.pre_init(44100, -16, 2, 2048) 
 pygame.mixer.init()
 
-# Detect Screen Size
 info = pygame.display.Info()
 WINDOW_WIDTH  = info.current_w
 WINDOW_HEIGHT = info.current_h
+FIGHT_USED = False
+FIGHT_USED = False
+current_run_score = 0
+current_run_coins = 0
+
 
 SCREEN = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.FULLSCREEN)
 pygame.display.set_caption("CrashOut Racer")
 
-# --- SPEED SETTINGS ---
 scroll_speed = 7.0    
 MAX_SPEED = 30.0      
 
@@ -29,7 +32,6 @@ def get_font(size):
     except:
         return pygame.font.SysFont("Arial", size, bold=True)
 
-# --- ROBUST SOUND LOADER ---
 def load_sound(filename_base):
     path_wav = f"assets/{filename_base}.wav"
     path_mp3 = f"assets/{filename_base}.mp3"
@@ -54,17 +56,29 @@ START_SFX = load_sound("start")
 if START_SFX: START_SFX.set_volume(1.0)
 
 # --- MAP LOADING ---
-try:
-    ROAD_IMG = pygame.image.load("assets/road_bg.png").convert()
-    ROAD_IMG = pygame.transform.scale(ROAD_IMG, (WINDOW_WIDTH, WINDOW_HEIGHT))
-    USE_CUSTOM_ROAD = True
-    BG = ROAD_IMG 
-except:
-    ROAD_IMG = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
-    ROAD_IMG.fill((30, 30, 30))
-    pygame.draw.rect(ROAD_IMG, (50, 50, 50), (WINDOW_WIDTH//6, 0, WINDOW_WIDTH*0.66, WINDOW_HEIGHT))
-    USE_CUSTOM_ROAD = False
-    BG = ROAD_IMG
+# --- MAP LOADING ---
+
+def load_and_scale(path):
+    img = pygame.image.load(path).convert()
+    return pygame.transform.scale(img, (WINDOW_WIDTH, WINDOW_HEIGHT))
+
+# pas de paden aan naar jouw bestanden
+ROAD_BG = load_and_scale("assets/road_bg.png")
+ROAD_CITY   = load_and_scale("assets/road_city.png")
+ROAD_FOREST = load_and_scale("assets/road_forest.png")
+ROAD_SNOW   = load_and_scale("assets/road_snow.png")
+ROAD_DESERT = load_and_scale("assets/road_desert.png")
+
+
+AREAS = [ROAD_BG, ROAD_CITY, ROAD_FOREST, ROAD_SNOW,ROAD_DESERT]
+current_area = 0
+next_area = 0
+transitioning = False
+transition_alpha = 0
+TRANSITION_SPEED = 5
+
+BG = AREAS[current_area]  # wordt gebruikt in menu/shop
+
 
 # --- 3. SAVE SYSTEM & DATA ---
 
@@ -187,8 +201,6 @@ class SmokeParticle(pygame.sprite.Sprite):
         if self.timer <= 0:
             self.kill()
 
-# --- NIEUWE CLASSES VOOR SNEEUW EN BANDENSPOREN ---
-
 class SnowParticle(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
@@ -227,8 +239,6 @@ class TireMark(pygame.sprite.Sprite):
         elif self.lifetime < 20:
             alpha = int(120 * (self.lifetime / 20))
             self.image.set_alpha(alpha)
-
-# --- VERNIEUWDE SPELER CLASS ---
 
 class PlayerCar(pygame.sprite.Sprite):
     def __init__(self, image_path, tire_group):
@@ -449,31 +459,72 @@ class Explosion(pygame.sprite.Sprite):
             p[1] += p[3] 
             pygame.draw.rect(self.image, p[4], (p[0], p[1], p[5], p[5]))
 
-def draw_background(surface, scroll_y):
-    if USE_CUSTOM_ROAD:
-        bg_height = ROAD_IMG.get_height()
-        relative_y = scroll_y % bg_height
-        surface.blit(ROAD_IMG, (0, relative_y - bg_height))
-        if relative_y < WINDOW_HEIGHT:
-            surface.blit(ROAD_IMG, (0, relative_y))
+def area_for_score(score):
+    if score < 2500:
+        return 0
+    elif score < 4000:
+        return 1
+    elif score < 5800:
+        return 2
+    elif score < 10000:
+        return 3
     else:
-        surface.fill((30, 100, 30))
-        pygame.draw.rect(surface, (50, 50, 50), (ROAD_X, 0, ROAD_WIDTH, WINDOW_HEIGHT))
-        pygame.draw.line(surface, (255, 255, 255), (ROAD_X, 0), (ROAD_X, WINDOW_HEIGHT), 5)
-        pygame.draw.line(surface, (255, 255, 255), (ROAD_X + ROAD_WIDTH, 0), (ROAD_X + ROAD_WIDTH, WINDOW_HEIGHT), 5)
+        return 3
+
+def start_area_transition(new_area):
+    global transitioning, next_area, transition_alpha, current_area
+    if new_area == current_area:
+        return
+    next_area = new_area
+    transitioning = True
+    transition_alpha = 0
+
+def update_area_for_score(score):
+    global current_area, transitioning
+    new_area = area_for_score(score)
+    if new_area != current_area and not transitioning:
+        start_area_transition(new_area)
+
+
+def draw_background(surface, scroll_y, score):
+    global current_area, transitioning, transition_alpha
+    update_area_for_score(score)
+    base_img = AREAS[current_area]
+    h = base_img.get_height()
+    rel = scroll_y % h
+
+    # basisbiome
+    surface.blit(base_img, (0, rel - h))
+    if rel < WINDOW_HEIGHT:
+        surface.blit(base_img, (0, rel))
+
+    # overgang naar volgende biome
+    if transitioning:
+        top_img = AREAS[next_area].copy()
+        top_img.set_alpha(transition_alpha)
+        surface.blit(top_img, (0, rel - h))
+        if rel < WINDOW_HEIGHT:
+            surface.blit(top_img, (0, rel))
+        transition_alpha += TRANSITION_SPEED
+        if transition_alpha >= 255:
+            transition_alpha = 255
+            transitioning = False
+            current_area = next_area
+
+
+# --- FIGHT & TRANSITION KOPPELING ---
 
 # --- FIGHT & TRANSITION KOPPELING ---
 
 def start_fight():
     """
-    Hier start je jullie aparte fight-game.
-    Pas de import en functie hieronder aan naar jullie echte fight code.
+    Start de fight-game en geeft True terug als P1 wint, False als je verliest.
     """
-    import fight_game  # <--- vervang met de naam van jullie fight-module
-    fight_game.main()  # <--- vervang met de start-functie van jullie fight scene
+    import fight
+    return fight.main()   # fight.main() MOET een bool teruggeven
 
 def crash_transition():
-    """Transition na crash voordat de fight scene start."""
+    """Transition na crash, daarna fight starten en resultaat teruggeven."""
     clock = pygame.time.Clock()
     duration = 120  # ~2 seconden
 
@@ -499,7 +550,9 @@ def crash_transition():
         clock.tick(FPS)
         t += 1
 
-    start_fight()
+    # heel belangrijk: geef hier het resultaat terug
+    return start_fight()
+
 
 # --- 6. USERNAME & LEADERBOARD SCREENS ---
 
@@ -673,8 +726,11 @@ def shop():
         pygame.display.update()
 
 def play():
+    global FIGHT_USED, current_run_score, current_run_coins
     pygame.mouse.set_visible(True) 
     clock = pygame.time.Clock()
+    current_run_score += 1
+    coins_collected = 0
     
     equipped_id = GAME_DATA["equipped"]
     car_info = next(item for item in CAR_SHOP if item["id"] == equipped_id)
@@ -697,8 +753,8 @@ def play():
     game_over = False
     crashed = False
     paused = False 
-    score = 0
-    coins_collected = 0
+    current_run_coins += 1
+    current_run_coins += 1
     
     scroll_speed = 7.0    
     MAX_SPEED = 30.0      
@@ -734,6 +790,7 @@ def play():
                             save_data(GAME_DATA)
                         main_menu()
                 if event.key == pygame.K_r and game_over:
+                    FIGHT_USED = False
                     play() 
             
             if event.type == pygame.MOUSEBUTTONDOWN and paused:
@@ -760,8 +817,9 @@ def play():
                     game_over = True
             else:
                 scroll_offset += scroll_speed
-                score += 1
-                
+                current_run_score += 1
+                update_area_for_score(score)
+
                 if score >= 5000 and 3 not in GAME_DATA["inventory"]:
                     GAME_DATA["inventory"].append(3)
                     save_data(GAME_DATA)
@@ -848,6 +906,8 @@ def play():
                 for hit in shield_hits:
                     if POWERUP_SFX and GAME_DATA["sound"]: POWERUP_SFX.play()
                     player.has_shield = True 
+                
+                
 
                 enemy_hits = pygame.sprite.spritecollide(player, enemies, False, pygame.sprite.collide_mask)
                 if enemy_hits:
@@ -866,23 +926,49 @@ def play():
                         player.kill()
                         smoke_group.empty() 
 
-                        # KORTE EXPLOSIE, DAN TRANSITION + FIGHT
+
+                        if FIGHT_USED:
+
+                            crash_timer = pygame.time.get_ticks()
+                            while pygame.time.get_ticks() - crash_timer < 500:
+                                draw_background(SCREEN, scroll_offset, score)
+                                snow_group.draw(SCREEN)
+                                tire_group.draw(SCREEN)
+                                smoke_group.update()
+                                smoke_group.draw(SCREEN)
+                                all_sprites.update()
+                                all_sprites.draw(SCREEN)
+                                pygame.display.flip()
+                                clock.tick(FPS)
+                            game_over = True
+                            continue
+
                         crash_timer = pygame.time.get_ticks()
                         while pygame.time.get_ticks() - crash_timer < 500:
-                            draw_background(SCREEN, scroll_offset)
+                            draw_background(SCREEN, scroll_offset, score)
+
                             snow_group.draw(SCREEN)
                             tire_group.draw(SCREEN)
-                            smoke_group.update()
-                            smoke_group.draw(SCREEN)
+                            smoke_group.update
                             all_sprites.update()
                             all_sprites.draw(SCREEN)
                             pygame.display.flip()
                             clock.tick(FPS)
+                        FIGHT_USED = True
 
-                        crash_transition()
-                        return  # stop de race-loop; fight-game neemt het over
+                        won = crash_transition()
+                        print("fight result:", won)  # laat in console zien wat fight.main() teruggeeft
 
-        draw_background(SCREEN, scroll_offset)
+                        if won:
+                            return play()   # nieuwe race-run starten
+                        else:
+                            return         # stopt deze play()
+
+
+
+
+        draw_background(SCREEN, scroll_offset, score)
+
         
         snow_group.draw(SCREEN)
         tire_group.draw(SCREEN)
@@ -1029,6 +1115,8 @@ def main_menu():
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if PLAY_BUTTON.checkForInput(MOUSE_POS):
+                    global FIGHT_USED
+                    FIGHT_USED = False
                     play() 
                 if CARS_BUTTON.checkForInput(MOUSE_POS):
                     shop() 
