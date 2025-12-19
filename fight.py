@@ -51,14 +51,26 @@ def fight_menu(screen, bg_image, biome_name):
                 if event.key == pygame.K_SPACE:
                     waiting = False
 
-def main(biome = "suburbs"):
+def main(enemy_type="Knight", biome = "suburbs"):
     
     mixer.init()
     pygame.init()
-
     screen = pygame.display.get_surface()
     if screen is None:
         screen = pygame.display.set_mode((0,0), pygame.FULLSCREEN)
+    if enemy_type == "Knight":
+        enemy_sheet = pygame.image.load("images/characters/Knight/untitled.png").convert_alpha()
+        enemy_data = [96, 7, [43, 44.5]] # BIKER_DATA
+        enemy_steps = [7, 8, 5, 5, 6, 4, 12]
+        enemy_name = "Knight"
+    else:
+        # Fallback to Biker if something goes wrong
+        enemy_sheet = pygame.image.load("images/characters/Gangster/untitled.png").convert_alpha()
+        enemy_data = [128, 5, [43, 56]]
+        enemy_steps = [7, 10, 10, 6, 6, 4, 5]
+        enemy_name = "Gangster"
+   
+    
 
     SCREEN_WIDTH, SCREEN_HEIGHT = screen.get_size()
 
@@ -91,17 +103,15 @@ def main(biome = "suburbs"):
     fight_menu(screen, bg_image, biome)
 
     DRIFTER_DATA = [128, 5, [45, 56]]
-    BIKER_DATA   = [128, 5, [43, 56]]
     DRIFTER_ANIMATION_STEPS = [11, 8, 16, 5, 3, 3, 4]
-    BIKER_ANIMATION_STEPS   = [7, 10, 10, 6, 6, 4, 5]
 
     # Assets
     pygame.mixer.music.load("images/audio/music5.mp3")
     pygame.mixer.music.set_volume(0.7)
     pygame.mixer.music.play(-1, 0.0, 2000)
     
-    Drifter_sheet = pygame.image.load("images/characters/Drifter/full2.png").convert_alpha()
-    Biker_sheet = pygame.image.load("images/characters/Biker/untitled.png").convert_alpha()
+    Drifter_sheet = pygame.image.load("images/characters/Jeffrey/full2.png").convert_alpha()
+    Biker_sheet = pygame.image.load("images/characters/Gangster/untitled.png").convert_alpha()
     # Load defeat image (replace with your file name)
     defeat_font = pygame.font.Font("images/font/Turok.ttf", int(SCREEN_WIDTH * 0.1))
     count_font = pygame.font.Font("images/font/Turok.ttf", int(SCREEN_WIDTH * 0.10))
@@ -127,7 +137,7 @@ def main(biome = "suburbs"):
     fighter_1 = Fighter(1, int(SCREEN_WIDTH * 0.13), int(SCREEN_HEIGHT * 0.88),
                     False, DRIFTER_DATA, Drifter_sheet, DRIFTER_ANIMATION_STEPS, is_cpu=False)
     fighter_2 = Fighter(2, int(SCREEN_WIDTH * 0.75), int(SCREEN_HEIGHT * 0.88),
-                    True,  BIKER_DATA,   Biker_sheet,   BIKER_ANIMATION_STEPS,   is_cpu=True)
+                    True, enemy_data, enemy_sheet, enemy_steps,  is_cpu=True)
 
 
     winner_is_p1 = False
@@ -193,7 +203,7 @@ def main(biome = "suburbs"):
 
             jeff_img = score_font.render("Jeffrey", True, RED)
             screen.blit(jeff_img, (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.0085)))
-            gang_img = score_font.render("Gangster", True, RED)
+            gang_img = score_font.render(enemy_name, True, RED)
             screen.blit(gang_img, (int(SCREEN_WIDTH * 0.847), int(SCREEN_HEIGHT * 0.0085)))
             
             for spark in sparks[:]:

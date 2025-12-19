@@ -570,12 +570,15 @@ def start_fight():
     global current_area
     import fight
     pygame.mixer.music.stop() 
+
+    opponents = ["Gangster", "Knight"]
+    chosen_enemy = random.choice(opponents)
     
     area_names = ["suburbs", "city", "forest", "snow", "desert"]
     current_biome = area_names[current_area]
     print(f"CAR SCRIPT SENDING: {current_biome}")
     # 2. Run the fight
-    victory = fight.main(current_biome)
+    victory = fight.main(chosen_enemy, current_biome)
 
     re_sync_display()
     if victory:

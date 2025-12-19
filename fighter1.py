@@ -31,6 +31,7 @@ class Fighter():
         for y, animation in enumerate(animation_steps):
             temp_img_list = []
             for x in range(animation):
+                print(f"DEBUG: Row {y}, Frame {x} | Size: {self.size} | Sheet: {sprite_sheet}")
                 temp_img = sprite_sheet.subsurface(x * self.size, y * self.size, self.size, self.size).convert_alpha()
                 temp_img_list.append(pygame.transform.scale(temp_img,(self.size * self.image_scale, self.size * self.image_scale)))
             animation_list.append(temp_img_list)
