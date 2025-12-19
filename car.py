@@ -1085,15 +1085,14 @@ def play(start_score=0, start_coins=0):
                             
                             if won:
                                 display_win_message() # Laat You Won bericht zien
-                                FIGHT_USED = False
                                 SCREEN = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.FULLSCREEN)
                                 return play(score, coins_collected)
                             else:
                                 # Verloren -> Game Over
+                                game_over = True
                                 GAME_DATA["coins"] += coins_collected
                                 save_data(GAME_DATA)
                                 pygame.mouse.set_visible(True)
-                                main_menu() # THIS takes you back to car menu
                                 return
                         else:
                             # Al gevochten? Dan gewoon game over animatie afmaken
@@ -1169,7 +1168,16 @@ def play(start_score=0, start_coins=0):
 
         if game_over:
             pygame.mouse.set_visible(True)
+
+            if GAME_DATA["leaderboard"] and score > GAME_DATA["leaderboard"][0]["score"]:
+                is_new_high_score = True
+            elif not GAME_DATA["leaderboard"]:
+                is_new_high_score = True
+        
             if not score_saved:
+                is_new_high_score = False
+                if not GAME_DATA["leaderboard"] or score > GAME_DATA["leaderboard"][0]["score"]:
+                    is_new_high_score = True
                 GAME_DATA["coins"] += coins_collected
                 GAME_DATA["leaderboard"].append({"name": GAME_DATA["username"], "score": score})
                 GAME_DATA["leaderboard"].sort(key=lambda x: x["score"], reverse=True)
@@ -1181,15 +1189,23 @@ def play(start_score=0, start_coins=0):
             overlay.set_alpha(180)
             overlay.fill((50, 0, 0))
             SCREEN.blit(overlay, (0,0))
-           
 
             go_text = get_font(60).render("CRASHED!", True, (255, 255, 255))
+            SCREEN.blit(go_text, (WINDOW_WIDTH//2 - go_text.get_width()//2, WINDOW_HEIGHT//2 - 140))
+
+            if is_new_high_score:
+                # Use a larger font size
+                high_font = get_font(90) 
+                high_text = high_font.render("NEW RECORD!", True, (255, 215, 0))
+                # We use a rect to ensure absolute centering
+                high_rect = high_text.get_rect(center=(WINDOW_WIDTH // 2 + 20, WINDOW_HEIGHT // 2 - 220))
+                SCREEN.blit(high_text, high_rect)
+
             final_coin = get_font(40).render(f"Collected: {coins_collected}", True, (255, 215, 0))
+            SCREEN.blit(final_coin, (WINDOW_WIDTH//2 - final_coin.get_width()//2, WINDOW_HEIGHT//2 - 20))
+
             restart_text = get_font(30).render("Press 'R' to Restart", True, (255, 255, 255))
-           
-            SCREEN.blit(go_text, (WINDOW_WIDTH//2 - go_text.get_width()//2, WINDOW_HEIGHT//2 - 80))
-            SCREEN.blit(final_coin, (WINDOW_WIDTH//2 - final_coin.get_width()//2, WINDOW_HEIGHT//2))
-            SCREEN.blit(restart_text, (WINDOW_WIDTH//2 - restart_text.get_width()//2, WINDOW_HEIGHT//2 + 60))
+            SCREEN.blit(restart_text, (WINDOW_WIDTH//2 - restart_text.get_width()//2, WINDOW_HEIGHT//2 + 100))
 
         pygame.display.flip()
         clock.tick(FPS)
