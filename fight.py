@@ -34,9 +34,9 @@ def fight_menu(screen, bg_image, biome_name):
         box_y = 300
         draw_text("--- CONTROLS ---", sub_font, (255, 215, 0), 320, screen)
         draw_text("ARROWS  -  Move & Jump", key_font, (255, 255, 255), 380, screen)
-        draw_text("O KEY   -  Punch (Attack 1)", key_font, (255, 255, 255), 420, screen)
-        draw_text("P KEY   -  Kick (Attack 2)", key_font, (255, 255, 255), 460, screen)
-        draw_text("ESCAPE  -  Quit Fight", key_font, (200, 200, 200), 520, screen)
+        draw_text("O KEY   -  Attack 1", key_font, (255, 255, 255), 420, screen)
+        draw_text("P KEY   -  Attack 2", key_font, (255, 255, 255), 460, screen)
+        draw_text("ESCAPE  -  Menu", key_font, (200, 200, 200), 520, screen)
 
         # 5. Start Prompt
         draw_text("Press SPACE to Start", sub_font, (0, 255, 0), 620, screen)
@@ -63,6 +63,12 @@ def main(enemy_type="Knight", biome = "suburbs"):
         enemy_data = [96, 7, [43, 44.5]] # BIKER_DATA
         enemy_steps = [7, 8, 5, 5, 6, 4, 12]
         enemy_name = "Knight"
+    elif enemy_type == "Peasant":
+        enemy_sheet = pygame.image.load("images/characters/Peasant/peasant.png").convert_alpha()
+        enemy_data = [150, 7, [63, 99]] # BIKER_DATA
+        enemy_steps = [8, 8, 2, 4, 4, 4, 6]
+        enemy_name = "Peasant"
+        
     else:
         # Fallback to Biker if something goes wrong
         enemy_sheet = pygame.image.load("images/characters/Gangster/untitled.png").convert_alpha()
@@ -84,7 +90,7 @@ def main(enemy_type="Knight", biome = "suburbs"):
 
 
     BIOME_BACKGROUNDS = {
-        "city": "images/background/city.png",
+        "city": "images/background/drerrie.png",
         "forest": "images/background/bos.png",
         "snow": "images/background/snow.jpg",
         "desert": "images/background/desertt.jpg",
@@ -119,7 +125,7 @@ def main(enemy_type="Knight", biome = "suburbs"):
     death_fx = pygame.mixer.Sound("images/fx/death.wav")
     death_fx.set_volume(0.9)
     hit_fx = pygame.mixer.Sound("images/fx/hit.aiff")
-    hit_fx.set_volume(1.5)
+    hit_fx.set_volume(2)
 
 
 
@@ -170,12 +176,11 @@ def main(enemy_type="Knight", biome = "suburbs"):
         draw_bg()
         draw_health_bar(fighter_1.health, int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.05))
         draw_health_bar(fighter_2.health, int(SCREEN_WIDTH * 0.55), int(SCREEN_HEIGHT * 0.05))
-        jeff_img = score_font.render("Jeffrey", True, RED)
-        screen.blit(jeff_img, (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.0085)))
-        gang_img = score_font.render("Gangster", True, RED)
-        screen.blit(gang_img, (int(SCREEN_WIDTH * 0.847), int(SCREEN_HEIGHT * 0.0085)))
+        
         fighter_1.draw(screen)
         fighter_2.draw(screen)
+        pygame.draw.rect(screen, (0, 255, 0), fighter_1.rect, 2) # Green box for Jeffrey
+        pygame.draw.rect(screen, (0, 255, 0), fighter_2.rect, 2)
 
         for spark in sparks:
             spark.draw(screen)        
@@ -204,7 +209,7 @@ def main(enemy_type="Knight", biome = "suburbs"):
             jeff_img = score_font.render("Jeffrey", True, RED)
             screen.blit(jeff_img, (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.0085)))
             gang_img = score_font.render(enemy_name, True, RED)
-            screen.blit(gang_img, (int(SCREEN_WIDTH * 0.847), int(SCREEN_HEIGHT * 0.0085)))
+            screen.blit(gang_img, (int(SCREEN_WIDTH * 0.86), int(SCREEN_HEIGHT * 0.0085)))
             
             for spark in sparks[:]:
                 spark.draw(screen)
@@ -217,12 +222,9 @@ def main(enemy_type="Knight", biome = "suburbs"):
                     intro_count -= 1
                     last_count_update = pygame.time.get_ticks()
             elif pygame.time.get_ticks() - last_count_update < 1000:
-                draw_text("GO!", count_font, RED, SCREEN_HEIGHT / 3, screen)
+                draw_text("FIGHT!", count_font, RED, SCREEN_HEIGHT / 3, screen)
 
-            jeff_img = score_font.render("Jeffrey", True, RED)
-            screen.blit(jeff_img, (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.0085)))
-            gang_img = score_font.render("Gangster", True, RED)
-            screen.blit(gang_img, (int(SCREEN_WIDTH * 0.847), int(SCREEN_HEIGHT * 0.0085)))
+            
 
             if not round_over:
                 if not fighter_1.alive or not fighter_2.alive:

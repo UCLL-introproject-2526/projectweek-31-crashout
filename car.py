@@ -571,7 +571,7 @@ def start_fight():
     import fight
     pygame.mixer.music.stop() 
 
-    opponents = ["Gangster", "Knight"]
+    opponents = ["Gangster", "Knight", "Peasant"]
     chosen_enemy = random.choice(opponents)
     
     area_names = ["suburbs", "city", "forest", "snow", "desert"]
@@ -621,7 +621,7 @@ def crash_transition():
         scale = 0.25 + (t / duration)
         # 1. Render "CRASH!" (Bigger font)
         crash_font_size = int(100 * scale)
-        crash_txt = get_font(crash_font_size).render("CRASH!", True, (255, 255, 255))
+        crash_txt = get_font(crash_font_size).render("ROAD RAGE!", True, (255, 255, 255))
         crash_rect = crash_txt.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 40))
         
         # 2. Render instructions (Smaller font)
@@ -1085,7 +1085,7 @@ def play(start_score=0, start_coins=0):
                             
                             if won:
                                 display_win_message() # Laat You Won bericht zien
-                                # HERSTART MET HUIDIGE SCORE/COINS
+                                FIGHT_USED = False
                                 SCREEN = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.FULLSCREEN)
                                 return play(score, coins_collected)
                             else:
