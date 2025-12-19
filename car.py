@@ -3,7 +3,12 @@ import random
 import sys
 import json
 import os
+import ctypes
 
+try:
+    ctypes.windll.user32.SetProcessDPIAware()
+except:
+    pass
 # --- 1. CONFIGURATION & CONSTANTS ---
 pygame.init()
 pygame.mixer.pre_init(44100, -16, 2, 2048)
@@ -51,6 +56,12 @@ if COIN_SFX: COIN_SFX.set_volume(0.6)
 POWERUP_SFX = load_sound("powerup")
 if POWERUP_SFX: POWERUP_SFX.set_volume(0.8)
 
+SHIELD_BREAK_SFX = load_sound("shield_down") # Make sure you have shield_break.wav or .mp3 in assets
+if SHIELD_BREAK_SFX: SHIELD_BREAK_SFX.set_volume(0.8)
+
+EXPLOSION_SFX = load_sound("explosion") 
+if EXPLOSION_SFX: EXPLOSION_SFX.set_volume(0.9)
+
 START_SFX = load_sound("start")
 if START_SFX: START_SFX.set_volume(1.0)
 
@@ -65,6 +76,41 @@ def load_and_scale(path):
         surf = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
         surf.fill((50, 50, 50))
         return surf
+def re_sync_display():
+    global SCREEN, WINDOW_WIDTH, WINDOW_HEIGHT, BG, AREAS
+    global ROAD_BG, ROAD_CITY, ROAD_FOREST, ROAD_SNOW, ROAD_DESERT
+    
+    # Get actual monitor resolution again
+    info = pygame.display.Info()
+    WINDOW_WIDTH = info.current_w
+    WINDOW_HEIGHT = info.current_h
+    
+    # Re-establish Fullscreen
+    SCREEN = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.FULLSCREEN)
+    
+    # Re-scale ALL background images to the new width/height
+    ROAD_BG = load_and_scale("assets/road_bg.png")
+    ROAD_CITY = load_and_scale("assets/road_city.png")
+    ROAD_FOREST = load_and_scale("assets/road_forest.png")
+    ROAD_SNOW = load_and_scale("assets/road_snow.png")
+    ROAD_DESERT = load_and_scale("assets/road_desert.png")
+    
+    AREAS = [ROAD_BG, ROAD_CITY, ROAD_FOREST, ROAD_SNOW, ROAD_DESERT]
+    BG = AREAS[current_area]
+
+    global ROAD_WIDTH, ROAD_X, LANE_COORDS
+    ROAD_WIDTH = int(WINDOW_WIDTH * 0.75)
+    ROAD_X = (WINDOW_WIDTH - ROAD_WIDTH) // 2
+    LANE_PADDING = int(ROAD_WIDTH * 0.04)
+    REAL_ROAD_WIDTH = ROAD_WIDTH - (LANE_PADDING * 2)
+    LANE_WIDTH = REAL_ROAD_WIDTH // 4
+    
+    LANE_COORDS = [
+        ROAD_X + LANE_PADDING + (LANE_WIDTH * 0.5),
+        ROAD_X + LANE_PADDING + (LANE_WIDTH * 1.5),
+        ROAD_X + LANE_PADDING + (LANE_WIDTH * 2.5),
+        ROAD_X + LANE_PADDING + (LANE_WIDTH * 3.5)  
+    ]
 
 # pas de paden aan naar jouw bestanden
 ROAD_BG = load_and_scale("assets/road_bg.png")
@@ -493,25 +539,27 @@ def update_area_for_score(score):
 def draw_background(surface, scroll_y, score):
     global current_area, transitioning, transition_alpha
     update_area_for_score(score)
+
     base_img = AREAS[current_area]
-    h = base_img.get_height()
+    h = WINDOW_HEIGHT
     rel = scroll_y % h
 
     # basisbiome
-    surface.blit(base_img, (0, rel - h))
-    if rel < WINDOW_HEIGHT:
-        surface.blit(base_img, (0, rel))
+    surface.blit(base_img, (0, int(rel - h)))
+    surface.blit(base_img, (0, int(rel)))
 
     # overgang naar volgende biome
     if transitioning:
         top_img = AREAS[next_area].copy()
         top_img.set_alpha(transition_alpha)
-        surface.blit(top_img, (0, rel - h))
-        if rel < WINDOW_HEIGHT:
-            surface.blit(top_img, (0, rel))
+        surface.blit(top_img, (0, int(rel - h)))
+        surface.blit(top_img, (0, int(rel)))
+        transition_alpha += TRANSITION_SPEED
+
         transition_alpha += TRANSITION_SPEED
         if transition_alpha >= 255:
             transition_alpha = 255
+            transition_alpha = 0 # reset for next time
             transitioning = False
             current_area = next_area
 
@@ -519,16 +567,40 @@ def draw_background(surface, scroll_y, score):
 # --- FIGHT & TRANSITION KOPPELING ---
 
 def start_fight():
-    """
-    Start de fight-game en geeft True terug als P1 wint, False als je verliest.
-    """
+    global current_area
     import fight
-    return fight.main()   # fight.main() MOET een bool teruggeven
+    pygame.mixer.music.stop() 
+    
+    area_names = ["suburbs", "city", "forest", "snow", "desert"]
+    current_biome = area_names[current_area]
+    print(f"CAR SCRIPT SENDING: {current_biome}")
+    # 2. Run the fight
+    victory = fight.main(current_biome)
+
+    re_sync_display()
+    if victory:
+        try:
+            pygame.mixer.music.load("assets/theme.mp3")
+            pygame.mixer.music.set_volume(0.5)
+            pygame.mixer.music.play(-1)
+            if not GAME_DATA["sound"]:
+                pygame.mixer.music.pause()
+        except:
+            print("Could not reload car theme.")
+            
+        display_win_message()
+        return True 
+    else:
+        # If defeat, keep music stopped or play a game-over sound
+        print("Defeat! Game Over.")
+        return False   
 
 def crash_transition():
+    global SCREEN
+    SCREEN = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.FULLSCREEN)
     """Transition na crash, daarna fight starten en resultaat teruggeven."""
     clock = pygame.time.Clock()
-    duration = 120  # ~2 seconden
+    duration = 180  # ~2 seconden
 
     t = 0
     while t < duration:
@@ -544,9 +616,19 @@ def crash_transition():
         SCREEN.blit(overlay, (0, 0))
 
         scale = 0.25 + (t / duration)
-        txt = get_font(int(60 * scale)).render("CRASH FIGHT HIM TO CONTINUE!", True, (255, 255, 255))
-        rect = txt.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
-        SCREEN.blit(txt, rect)
+        # 1. Render "CRASH!" (Bigger font)
+        crash_font_size = int(100 * scale)
+        crash_txt = get_font(crash_font_size).render("CRASH!", True, (255, 255, 255))
+        crash_rect = crash_txt.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 40))
+        
+        # 2. Render instructions (Smaller font)
+        sub_font_size = int(40 * scale)
+        sub_txt = get_font(sub_font_size).render("FIGHT HIM TO CONTINUE!", True, (255, 255, 255))
+        sub_rect = sub_txt.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 60))
+
+        # Draw both
+        SCREEN.blit(crash_txt, crash_rect)
+        SCREEN.blit(sub_txt, sub_rect)
 
         pygame.display.flip()
         clock.tick(FPS)
@@ -558,7 +640,7 @@ def crash_transition():
 def display_win_message():
     """Laat zien dat je gewonnen hebt voordat de race doorgaat"""
     clock = pygame.time.Clock()
-    duration = 150 # 2.5 seconden
+    duration = 60 # 2.5 seconden
     
     t = 0
     while t < duration:
@@ -757,7 +839,19 @@ def shop():
 
 # --- PLAY FUNCTIE MET ARGUMENTEN ---
 def play(start_score=0, start_coins=0):
+    global SCREEN
+    SCREEN = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.FULLSCREEN)
     global FIGHT_USED, current_run_score, current_run_coins
+
+    if GAME_DATA["sound"]:
+        if not pygame.mixer.music.get_busy(): # If no music is playing
+            try:
+                pygame.mixer.music.load("assets/theme.mp3")
+                pygame.mixer.music.set_volume(0.5)
+                pygame.mixer.music.play(-1)
+            except:
+                print("Theme music file not found.")
+
     pygame.mouse.set_visible(True)
     clock = pygame.time.Clock()
     
@@ -804,7 +898,10 @@ def play(start_score=0, start_coins=0):
 
     while True:
         MOUSE_POS = pygame.mouse.get_pos()
-       
+
+        if not pygame.display.get_active():
+            pygame.mixer.music.pause()
+            paused = True
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 GAME_DATA["coins"] += coins_collected
@@ -945,6 +1042,8 @@ def play(start_score=0, start_coins=0):
                 if enemy_hits:
                     if player.has_shield:
                         player.has_shield = False
+                        if SHIELD_BREAK_SFX:
+                            SHIELD_BREAK_SFX.play()
                         blue_pop = Explosion(player.rect.center, style="blue")
                         all_sprites.add(blue_pop)
                         for enemy in enemy_hits:
@@ -954,6 +1053,10 @@ def play(start_score=0, start_coins=0):
                     else:
                         # CRASH LOGICA
                         crashed = True
+
+                        if EXPLOSION_SFX and GAME_DATA["sound"]:
+                            EXPLOSION_SFX.play()
+
                         boom = Explosion(player.rect.center, style="fire")
                         all_sprites.add(boom)
                         player.kill()
@@ -980,11 +1083,15 @@ def play(start_score=0, start_coins=0):
                             if won:
                                 display_win_message() # Laat You Won bericht zien
                                 # HERSTART MET HUIDIGE SCORE/COINS
+                                SCREEN = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.FULLSCREEN)
                                 return play(score, coins_collected)
                             else:
                                 # Verloren -> Game Over
-                                game_over = True
-                                continue
+                                GAME_DATA["coins"] += coins_collected
+                                save_data(GAME_DATA)
+                                pygame.mouse.set_visible(True)
+                                main_menu() # THIS takes you back to car menu
+                                return
                         else:
                             # Al gevochten? Dan gewoon game over animatie afmaken
                             pass

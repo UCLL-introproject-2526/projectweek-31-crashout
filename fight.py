@@ -1,11 +1,65 @@
 # fight.py
 import pygame
+from pygame import mixer
 from fighter1 import Fighter
+from hitspark import HitSpark
+from button import Button
+def draw_text(text, font, col, y, screen):
+    img = font.render(text, True, col)
+    x = (screen.get_width() // 2) - (img.get_width() // 2)
+    screen.blit(img, (x, y))
+def fight_menu(screen, bg_image, biome_name):
+    """The screen that shows up before the fight starts with a tutorial"""
+    menu_font = pygame.font.Font("images/font/Turok.ttf", 80)
+    sub_font = pygame.font.Font("images/font/Turok.ttf", 40)
+    key_font = pygame.font.Font("images/font/Turok.ttf", 30)
+    
+    waiting = True
+    while waiting:
+        # 1. Draw and scale background
+        screen.blit(pygame.transform.scale(bg_image, screen.get_size()), (0, 0))
+        
+        # 2. Dark overlay for readability
+        overlay = pygame.Surface(screen.get_size())
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(180) # Slightly darker to see tutorial
+        screen.blit(overlay, (0, 0))
 
-def main():
+        # 3. Main Titles
+        draw_text("GET READY!", menu_font, (255, 0, 0), 100, screen)
+        draw_text(f"LOCATION: {biome_name.upper()}", sub_font, (255, 255, 255), 190, screen)
+
+        # 4. KEYBINDS BOX (Tutorial)
+        box_x = screen.get_width()//2 - 200
+        box_y = 300
+        draw_text("--- CONTROLS ---", sub_font, (255, 215, 0), 320, screen)
+        draw_text("ARROWS  -  Move & Jump", key_font, (255, 255, 255), 380, screen)
+        draw_text("O KEY   -  Punch (Attack 1)", key_font, (255, 255, 255), 420, screen)
+        draw_text("P KEY   -  Kick (Attack 2)", key_font, (255, 255, 255), 460, screen)
+        draw_text("ESCAPE  -  Quit Fight", key_font, (200, 200, 200), 520, screen)
+
+        # 5. Start Prompt
+        draw_text("Press SPACE to Start", sub_font, (0, 255, 0), 620, screen)
+
+        pygame.display.update()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    waiting = False
+
+def main(biome = "suburbs"):
+    
+    mixer.init()
     pygame.init()
-    SCREEN_WIDTH, SCREEN_HEIGHT = 1920, 1080
+
     screen = pygame.display.get_surface()
+    if screen is None:
+        screen = pygame.display.set_mode((0,0), pygame.FULLSCREEN)
+
     SCREEN_WIDTH, SCREEN_HEIGHT = screen.get_size()
 
     clock = pygame.time.Clock()
@@ -14,105 +68,194 @@ def main():
     YELLOW = (255, 255, 0)
     RED    = (255, 0, 0)
     WHITE  = (255, 255, 255)
+    BLACK = (0,0,0)
 
+
+    BIOME_BACKGROUNDS = {
+        "city": "images/background/city.png",
+        "forest": "images/background/bos.png",
+        "snow": "images/background/snow.jpg",
+        "desert": "images/background/desertt.jpg",
+        "suburbs": "images/background/suburb.png"
+    }
+    bg_path = BIOME_BACKGROUNDS.get(biome, "images/background/suburb.png")
+    try:
+        bg_image = pygame.image.load(bg_path).convert_alpha()
+    except:
+        bg_image = pygame.image.load("images/background/suburb.png").convert_alpha()
     intro_count = 3
     last_count_update = pygame.time.get_ticks()
-    score = [0, 0]
     round_over = False
-    round_over_time = 0
     ROUND_OVER_COOLDOWN = 2000
-
-    bg_image = pygame.image.load("images/background/forest.jpg").convert_alpha()
-    Drifter_sheet = pygame.image.load("images/characters/Drifter/full2.png").convert_alpha()
-    Biker_sheet   = pygame.image.load("images/characters/Biker/untitled.png").convert_alpha()
-    victory_img   = pygame.image.load("images/victory/victory.png").convert_alpha()
-    victory_img   = pygame.transform.scale(victory_img, (1000, 200))
+    sparks = []
+    fight_menu(screen, bg_image, biome)
 
     DRIFTER_DATA = [128, 5, [45, 56]]
     BIKER_DATA   = [128, 5, [43, 56]]
     DRIFTER_ANIMATION_STEPS = [11, 8, 16, 5, 3, 3, 4]
     BIKER_ANIMATION_STEPS   = [7, 10, 10, 6, 6, 4, 5]
 
-    count_font = pygame.font.Font("images/font/Turok.ttf", 80)
-    score_font = pygame.font.Font("images/font/Turok.ttf", 30)
+    # Assets
+    pygame.mixer.music.load("images/audio/music5.mp3")
+    pygame.mixer.music.set_volume(0.7)
+    pygame.mixer.music.play(-1, 0.0, 2000)
     
-    def draw_text(text, font, col, x, y):
-        img = font.render(text, True, col)
-        screen.blit(img, (x, y))
+    Drifter_sheet = pygame.image.load("images/characters/Drifter/full2.png").convert_alpha()
+    Biker_sheet = pygame.image.load("images/characters/Biker/untitled.png").convert_alpha()
+    # Load defeat image (replace with your file name)
+    defeat_font = pygame.font.Font("images/font/Turok.ttf", int(SCREEN_WIDTH * 0.1))
+    count_font = pygame.font.Font("images/font/Turok.ttf", int(SCREEN_WIDTH * 0.10))
+    score_font = pygame.font.Font("images/font/Turok.ttf", int(SCREEN_WIDTH * 0.025))
+    death_fx = pygame.mixer.Sound("images/fx/death.wav")
+    death_fx.set_volume(0.9)
+    hit_fx = pygame.mixer.Sound("images/fx/hit.aiff")
+    hit_fx.set_volume(1.5)
+
+
 
     def draw_bg():
         scaled_bg = pygame.transform.scale(bg_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
         screen.blit(scaled_bg, (0, 0))
 
     def draw_health_bar(health, x, y):
+        bar_width = SCREEN_WIDTH * 0.4
         ratio = health / 100
-        pygame.draw.rect(screen, WHITE, (x - 2, y - 2, 604, 44))
-        pygame.draw.rect(screen, (255, 0, 0), (x, y, 600, 40))
-        pygame.draw.rect(screen, YELLOW, (x, y, 600 * ratio, 40))
+        pygame.draw.rect(screen, WHITE, (x - 2, y - 2, bar_width + 4, 44))
+        pygame.draw.rect(screen, (255, 0, 0), (x,y,bar_width, 40))
+        pygame.draw.rect(screen, YELLOW, (x, y, bar_width * ratio, 40))
 
-    fighter_1 = Fighter(1, int(SCREEN_WIDTH * 0.25), int(SCREEN_HEIGHT * 0.7),
+    fighter_1 = Fighter(1, int(SCREEN_WIDTH * 0.13), int(SCREEN_HEIGHT * 0.88),
                     False, DRIFTER_DATA, Drifter_sheet, DRIFTER_ANIMATION_STEPS, is_cpu=False)
-    fighter_2 = Fighter(2, int(SCREEN_WIDTH * 0.75), int(SCREEN_HEIGHT * 0.7),
+    fighter_2 = Fighter(2, int(SCREEN_WIDTH * 0.75), int(SCREEN_HEIGHT * 0.88),
                     True,  BIKER_DATA,   Biker_sheet,   BIKER_ANIMATION_STEPS,   is_cpu=True)
 
 
     winner_is_p1 = False
     running = True
+    paused = False
+
+    pygame.mouse.set_visible(False)
 
     while running:
         clock.tick(FPS)
-        draw_bg()
-        draw_health_bar(fighter_1.health, int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.05))
-        draw_health_bar(fighter_2.health, int(SCREEN_WIDTH * 0.55), int(SCREEN_HEIGHT * 0.05))
-
-        draw_text("P1: " + str(score[0]), score_font, RED,
-          int(SCREEN_WIDTH * 0.35), int(SCREEN_HEIGHT * 0.08))
-        draw_text("AI: " + str(score[1]), score_font, RED,
-          int(SCREEN_WIDTH * 0.75), int(SCREEN_HEIGHT * 0.08))
-
-
-        if intro_count <= 0:
-            fighter_1.move(SCREEN_WIDTH, SCREEN_HEIGHT, screen, fighter_2, round_over)
-            fighter_2.move(SCREEN_WIDTH, SCREEN_HEIGHT, screen, fighter_1, round_over)
-        else:
-            img = count_font.render(str(intro_count), True, RED)
-            screen.blit(img, (SCREEN_WIDTH / 2, SCREEN_HEIGHT / 3))
-            if pygame.time.get_ticks() - last_count_update >= 1000:
-                intro_count -= 1
-                last_count_update = pygame.time.get_ticks()
-
-        fighter_1.update()
-        fighter_2.update()
-        fighter_1.draw(screen)
-        fighter_2.draw(screen)
-
-        if not round_over:
-            if not fighter_1.alive:
-                winner_is_p1 = False
-                round_over = True
-                round_over_time = pygame.time.get_ticks()
-                winner_is_p1 = False
-            elif not fighter_2.alive:
-                winner_is_p1 = True
-                round_over = True
-                round_over_time = pygame.time.get_ticks()
-                
-        else:
-            victory_rect = victory_img.get_rect(center=(SCREEN_WIDTH // 2, int(SCREEN_HEIGHT * 0.25)))
-            screen.blit(victory_img, victory_rect)
-
-            if pygame.time.get_ticks() - round_over_time > ROUND_OVER_COOLDOWN:
-                running = False  # stop de fight-loop
+        MOUSE_POS = pygame.mouse.get_pos()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
-                winner_is_p1 = False
+                pygame.quit()
+                exit()
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    paused = not paused # Toggle pause
+                    pygame.mouse.set_visible(paused)
+
+            if paused and event.type == pygame.MOUSEBUTTONDOWN:
+                if RESUME_BTN.checkForInput(MOUSE_POS):
+                    paused = False
+                    pygame.mouse.set_visible(False)
+                if QUIT_BTN.checkForInput(MOUSE_POS):
+                    pygame.mixer.music.stop()
+                    return False
+        draw_bg()
+        draw_health_bar(fighter_1.health, int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.05))
+        draw_health_bar(fighter_2.health, int(SCREEN_WIDTH * 0.55), int(SCREEN_HEIGHT * 0.05))
+        jeff_img = score_font.render("Jeffrey", True, RED)
+        screen.blit(jeff_img, (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.0085)))
+        gang_img = score_font.render("Gangster", True, RED)
+        screen.blit(gang_img, (int(SCREEN_WIDTH * 0.847), int(SCREEN_HEIGHT * 0.0085)))
+        fighter_1.draw(screen)
+        fighter_2.draw(screen)
+
+        for spark in sparks:
+            spark.draw(screen)        
+        if not paused:              
+            draw_bg()
+
+            # Update and check for hits to spawn VFX
+            if fighter_1.update(fighter_2):
+                sparks.append(HitSpark(fighter_2.rect.centerx, fighter_2.rect.centery, fighter_1.flip))
+                if fighter_2.alive:
+                    hit_fx.play()
+            if fighter_2.update(fighter_1):
+                sparks.append(HitSpark(fighter_1.rect.centerx, fighter_1.rect.centery, fighter_2.flip))
+                if fighter_1.alive:
+                    hit_fx.play()
+
+            fighter_1.move(SCREEN_WIDTH, SCREEN_HEIGHT, screen, fighter_2, round_over, intro_count)
+            fighter_2.move(SCREEN_WIDTH, SCREEN_HEIGHT, screen, fighter_1, round_over, intro_count)
+
+            draw_health_bar(fighter_1.health, int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.05))
+            draw_health_bar(fighter_2.health, int(SCREEN_WIDTH * 0.55), int(SCREEN_HEIGHT * 0.05))
+
+            fighter_1.draw(screen)
+            fighter_2.draw(screen)
+
+            jeff_img = score_font.render("Jeffrey", True, RED)
+            screen.blit(jeff_img, (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.0085)))
+            gang_img = score_font.render("Gangster", True, RED)
+            screen.blit(gang_img, (int(SCREEN_WIDTH * 0.847), int(SCREEN_HEIGHT * 0.0085)))
+            
+            for spark in sparks[:]:
+                spark.draw(screen)
+                if not spark.alive:
+                    sparks.remove(spark)
+
+            if intro_count > 0:
+                draw_text(str(intro_count), count_font, RED, SCREEN_HEIGHT / 3, screen)
+                if pygame.time.get_ticks() - last_count_update >= 1000:
+                    intro_count -= 1
+                    last_count_update = pygame.time.get_ticks()
+            elif pygame.time.get_ticks() - last_count_update < 1000:
+                draw_text("GO!", count_font, RED, SCREEN_HEIGHT / 3, screen)
+
+            jeff_img = score_font.render("Jeffrey", True, RED)
+            screen.blit(jeff_img, (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.0085)))
+            gang_img = score_font.render("Gangster", True, RED)
+            screen.blit(gang_img, (int(SCREEN_WIDTH * 0.847), int(SCREEN_HEIGHT * 0.0085)))
+
+            if not round_over:
+                if not fighter_1.alive or not fighter_2.alive:
+                    death_fx.play()
+                    if not fighter_2.alive:
+                        winner_is_p1 = True  # Jeffrey wins
+                    else:
+                        winner_is_p1 = False
+                        
+                    round_over = True
+                    round_over_time = pygame.time.get_ticks()
+                    
+            else:
+                msg = "VICTORY" if winner_is_p1 == 1 else "DEFEAT"
+                msg_img = defeat_font.render(msg, True, RED)
+                screen.blit(msg_img, (SCREEN_WIDTH/2 - msg_img.get_width()/2, SCREEN_HEIGHT/3)) 
+                    
+                if pygame.time.get_ticks() - round_over_time > ROUND_OVER_COOLDOWN:
+                    pygame.mixer.music.stop()
+                    running = False
+        
+        else:
+            overlay = pygame.Surface(screen.get_size())
+            overlay.fill((0, 0, 0))
+            overlay.set_alpha(150)
+            screen.blit(overlay, (0, 0))
+
+            draw_text("PAUSED", count_font, YELLOW, SCREEN_HEIGHT // 4, screen)
+
+            # Create the buttons using the class from button.py
+            RESUME_BTN = Button(image=None, pos=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), 
+                                text_input="RESUME", font=score_font, base_color="White", hovering_color="Green")
+            
+            QUIT_BTN = Button(image=None, pos=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 100), 
+                                text_input="MAIN MENU", font=score_font, base_color="White", hovering_color="Red")
+            for btn in [RESUME_BTN, QUIT_BTN]:
+                btn.changeColor(MOUSE_POS)
+                btn.update(screen)
 
         pygame.display.update()
 
-    
-    return winner_is_p1  # True = P1 wint, False = verlies
+        
+    return winner_is_p1
 
 if __name__ == "__main__":
-    main()
+        main()
